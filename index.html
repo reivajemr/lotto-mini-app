@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lotto Animalitos Bot</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <header class="user-header">
+            <div class="user-info">
+                <img id="user-photo" src="https://via.placeholder.com/40" alt="Avatar">
+                <span id="user-name">Cargando...</span>
+            </div>
+            <div class="balances">
+                <div class="balance-item">🥬 <span id="val-lechugas">0</span></div>
+                <div class="balance-item">💎 <span id="val-ton">0.00</span></div>
+            </div>
+        </header>
+
+        <main id="main-content">
+            <section id="home-section">
+                <div class="banner">¡Sorteo de las 10:00 AM en curso!</div>
+                <button class="btn-play" onclick="abrirJuego()">🎰 JUGAR AHORA</button>
+            </section>
+        </main>
+
+        <nav class="bottom-nav">
+            <button onclick="showSection('home')">🏠 Lobby</button>
+            <button onclick="showSection('tasks')">📺 Tareas</button>
+            <button onclick="showSection('wallet')">💰 Wallet</button>
+            <button onclick="showSection('referrals')">👥 Amigos</button>
+        </nav>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
