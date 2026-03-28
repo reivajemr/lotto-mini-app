@@ -86,3 +86,35 @@ body {
     border-radius: 8px;
     font-weight: bold;
 }
+.wallet-card {
+    background: linear-gradient(145deg, #2d2d2d, #252525);
+    margin: 15px;
+    padding: 20px;
+    border-radius: 20px;
+    text-align: center;
+    border: 1px solid #444;
+}
+
+#ton-connect {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.wallet-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-deposit, .btn-withdraw {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-deposit { background: var(--accent); color: white; }
+.btn-withdraw { background: #444; color: white; }
