@@ -58,3 +58,31 @@ body {
     font-weight: bold;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
+.task-card {
+    background: var(--card-bg);
+    margin: 10px;
+    padding: 15px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #333;
+}
+
+.task-info span {
+    display: block;
+    font-weight: bold;
+}
+
+.task-info small {
+    color: var(--success);
+}
+
+.btn-task {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-weight: bold;
+}
