@@ -2,60 +2,55 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Animalito Lotto</title>
+    <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; }
-        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; z-index: 100; }
-        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; }
-        .section { padding: 20px; display: none; padding-bottom: 100px; text-align: center; }
-        .btn-action { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 15px; color: white; font-size: 16px; cursor: pointer; }
-    </style>
 </head>
 <body>
+    <div id="app">
+        <header>
+            <div class="user-info">
+                <span id="user-name">Cargando...</span>
+                <div class="balance-container">
+                    <img src="lechuga.png" alt="lechuga" class="icon">
+                    <span id="balance">0</span>
+                </div>
+            </div>
+            <button id="connect-wallet-btn" class="wallet-btn" onclick="showSection('wallet')">
+                <img src="wallet-icon.png" alt=""> Connect Wallet
+            </button>
+        </header>
 
-    <div class="header">
-        <div style="text-align: left;">
-            <span id="user-name" style="font-weight: bold;">Cargando...</span>
-            <div style="font-size: 14px; margin-top: 5px;">🥬 <span id="balance">0</span></div>
-        </div>
-        <div id="ton-connect"></div>
+        <main>
+            <div id="lobby" class="section active">
+                <h1>🎰 Lobby</h1>
+                <p>¡Bienvenido a Animalito Lotto!</p>
+            </div>
+
+            <div id="tasks" class="section" style="display:none;">
+                <h1>📋 Tareas</h1>
+                <p>Completa misiones para ganar lechugas.</p>
+            </div>
+
+            <div id="wallet" class="section" style="display:none;">
+                <h1>👛 Wallet</h1>
+                <p>Gestiona tus retiros y depósitos.</p>
+            </div>
+
+            <div id="referrals" class="section" style="display:none;">
+                <h1>👥 Amigos</h1>
+                <p>Invita y gana bonificaciones.</p>
+            </div>
+        </main>
+
+        <nav class="bottom-nav">
+            <button onclick="showSection('lobby')">🏠 Lobby</button>
+            <button onclick="showSection('tasks')">📋 Tareas</button>
+            <button onclick="showSection('wallet')">👛 Wallet</button>
+            <button onclick="showSection('referrals')">👥 Amigos</button>
+        </nav>
     </div>
-
-    <div id="home-section" class="section" style="display: block;">
-        <h2 style="color: #ffcc00;">🎰 Lobby</h2>
-        <p>¡Bienvenido!</p>
-    </div>
-
-    <div id="tasks-section" class="section">
-        <h2>📋 Tareas</h2>
-        <button onclick="tg.showAlert('Próximamente')" class="btn-action" style="background: #333;">🎬 Ver Anuncio</button>
-    </div>
-
-    <div id="wallet-section" class="section">
-        <h2 style="color: #4caf50;">💰 Wallet</h2>
-        <div style="background: #2a2a2a; padding: 25px; border-radius: 20px; margin-bottom: 25px;">
-            <h1 id="wallet-coins-display" style="font-size: 40px; margin: 0;">0</h1>
-            <p>Lechugas</p>
-        </div>
-        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">📥 Comprar 1,000 🥬</button>
-    </div>
-
-    <div id="referrals-section" class="section">
-        <h2>👥 Amigos</h2>
-        <p>Próximamente</p>
-    </div>
-
-    <div class="nav-bar">
-        <button onclick="showSection('home')">🏠<br>Lobby</button>
-        <button onclick="showSection('tasks')">📋<br>Tareas</button>
-        <button onclick="showSection('wallet')">💰<br>Wallet</button>
-        <button onclick="showSection('referrals')">👥<br>Amigos</button>
-    </div>
-
-    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js" defer></script>
     <script src="app.js"></script>
 </body>
 </html>
