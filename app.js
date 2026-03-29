@@ -1,74 +1,110 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// FUNCIÓN PARA CARGAR SECCIONES DESDE ARCHIVOS EXTERNOS
+// 1. MOTOR DE CARGA DINÁMICA DE SECCIONES
 async function showSection(sectionId) {
     const mainContent = document.getElementById('main-content');
     
-    // 1. Efecto visual de carga
-    mainContent.innerHTML = '<div class="loader">Cargando...</div>';
+    // Efecto visual de carga inicial
+    mainContent.innerHTML = '<div style="text-align:center; margin-top:50px;">Cargando...</div>';
 
     try {
-        // 2. Intentar traer el archivo HTML de la carpeta /sections
+        // Buscamos el archivo HTML en la carpeta /sections
         const response = await fetch(`sections/${sectionId}.html`);
         
-        if (!response.ok) throw new Error("No se pudo encontrar la sección");
-
-        const html = await response.text();
-        
-        // 3. Inyectar el contenido
-        mainContent.innerHTML = html;
-
-        // 4. Si entramos a la sección 'wallet', reactivar el botón azul
-        if (sectionId === 'wallet') {
-            const btn = document.getElementById('connect-wallet-btn-inner');
-            if (btn) btn.addEventListener('click', connectWallet);
+        if (!response.ok) {
+            throw new Error(`No se encontró la sección: ${sectionId}`);
         }
 
-        // 5. Actualizar botones del menú
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.getAttribute('onclick').includes(sectionId)) {
-                item.classList.add('active');
+        const html = await response.text();
+        mainContent.innerHTML = html;
+
+        // VINCULACIÓN ESPECIAL PARA EL BOTÓN DE WALLET
+        if (sectionId === 'wallet') {
+            const walletBtn = document.getElementById('connect-wallet-btn-inner');
+            if (walletBtn) {
+                walletBtn.onclick = connectWallet;
+                console.log("Botón de Wallet vinculado con éxito.");
             }
-        });
+        }
+
+        actualizarMenuVisual(sectionId);
 
     } catch (error) {
-        mainContent.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-        console.error("Error cargando sección:", error);
+        mainContent.innerHTML = `<div style="color:red; padding:20px;">Error: ${error.message}</div>`;
+        console.error("Error al cargar sección:", error);
     }
 }
 
-// CARGAR DATOS INICIALES (LECHUGAS)
-async function cargarDatos() {
-    const user = tg.initDataUnsafe.user;
-    if (!user) return;
+// 2. ACTUALIZACIÓN VISUAL DEL MENÚ INFERIOR
+function actualizarMenuVisual(sectionId) {
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+        item.classList.remove('active');
+        // Verificamos cuál botón coincide con la sección actual
+        if (item.getAttribute('onclick').includes(sectionId)) {
+            item.classList.add('active');
+        }
+    });
+}
 
-    document.getElementById('user-name').innerText = user.first_name;
+// 3. LÓGICA DE CONEXIÓN DE WALLET
+function connectWallet() {
+    const btn = document.getElementById('connect-wallet-btn-inner');
+    if (!btn) return;
+
+    tg.HapticFeedback.impactOccurred('medium'); // Vibración al presionar
+    btn.innerText = "Conectando...";
+    btn.disabled = true;
+
+    // Simulación de conexión (Próximo paso: TonConnect)
+    setTimeout(() => {
+        btn.innerText = "Wallet: 0x...1234 ✅";
+        btn.style.background = "linear-gradient(135deg, #28a745, #218838)";
+        console.log("Wallet conectada exitosamente.");
+    }, 1500);
+}
+
+// 4. CARGAR DATOS DEL USUARIO Y SALDO (MONGODB)
+async function cargarDatosUsuario() {
+    const user = tg.initDataUnsafe.user;
     
+    if (!user) {
+        console.log("No se detectó usuario de Telegram.");
+        return;
+    }
+
+    // Mostrar nombre en el Header
+    document.getElementById('user-name').innerText = user.first_name || "Usuario";
+    
+    // Intentar cargar la foto de perfil
+    if (user.photo_url) {
+        const photoEl = document.getElementById('user-photo');
+        if (photoEl) photoEl.src = user.photo_url;
+    }
+
     try {
-        const res = await fetch('/api/user', {
+        // Petición a tu API protegida en Vercel
+        const response = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telegramId: user.id.toString() })
         });
-        const data = await res.json();
+
+        const data = await response.json();
         
         // Sincronizar tus 1000 lechugas
-        if (data.coins !== undefined) {
+        if (data && data.coins !== undefined) {
             document.getElementById('balance').innerText = data.coins;
         }
-    } catch (e) {
-        console.log("Error de sincronización con MongoDB");
+
+    } catch (error) {
+        console.error("Error al conectar con la API de usuario:", error);
     }
 }
 
-function connectWallet() {
-    alert("Conectando con Tonkeeper...");
-}
-
-// INICIO DE LA APP
+// 5. INICIALIZACIÓN AL ABRIR LA APP
 document.addEventListener('DOMContentLoaded', () => {
-    cargarDatos();
-    showSection('lobby'); // Carga el lobby por defecto
+    cargarDatosUsuario();
+    showSection('lobby'); // Carga el lobby automáticamente al entrar
 });
