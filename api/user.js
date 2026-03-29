@@ -1,28 +1,39 @@
-const { MongoClient } = require('mongodb');
-const uri = process.env.MONGODB_URI;
-let cachedClient = null;
+// api/user.js
+import { MongoClient } from 'mongodb';
+
+let cachedDb = null;
+
+async function connectToDatabase() {
+  if (cachedDb) return cachedDb;
+  const client = await MongoClient.connect(process.env.MONGODB_URI);
+  const db = client.db('animalito_db');
+  cachedDb = db;
+  return db;
+}
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Solo POST' });
-    try {
-        if (!cachedClient) {
-            cachedClient = new MongoClient(uri);
-            await cachedClient.connect();
-        }
-        const db = cachedClient.db('lotto_game');
-        const users = db.collection('users');
-        const { telegramId, username } = req.body;
+  try {
+    const db = await connectToDatabase();
+    const { telegramId, username, reward } = req.body;
 
-        const result = await users.findOneAndUpdate(
-            { telegramId: telegramId },
-            { 
-                $setOnInsert: { coins: 500, gems: 0.0, createdAt: new Date() },
-                $set: { username: username, lastLogin: new Date() }
-            },
-            { upsert: true, returnDocument: 'after' }
-        );
-        return res.status(200).json(result);
-    } catch (e) {
-        return res.status(500).json({ error: e.message });
+    if (reward) {
+      // USAR $inc ES VITAL: Esto suma las lechugas, no las sobrescribe
+      await db.collection('users').updateOne(
+        { telegramId: telegramId },
+        { $inc: { coins: reward } }, 
+        { upsert: true }
+      );
+    } else {
+      // Crear o buscar usuario al iniciar
+      const user = await db.collection('users').findOne({ telegramId: telegramId });
+      if (!user) {
+        await db.collection('users').insertOne({ telegramId, username, coins: 0 });
+        return res.status(200).json({ coins: 0 });
+      }
+      return res.status(200).json(user);
     }
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Error de servidor" });
+  }
 }
