@@ -8,13 +8,13 @@
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <script src="https://adsgram.ai/js/adsgram-sdk.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; }
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; overflow-x: hidden; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 100; }
         .user-info { display: flex; flex-direction: column; }
-        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; }
-        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; }
-        .section { padding: 20px; display: none; padding-bottom: 80px; }
-        .btn-action { width: 100%; padding: 15px; border-radius: 10px; border: none; font-weight: bold; margin-bottom: 10px; cursor: pointer; color: white; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; z-index: 100; }
+        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; transition: 0.3s; }
+        .section { padding: 20px; display: none; padding-bottom: 100px; min-height: 80vh; }
+        .btn-action { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 15px; cursor: pointer; color: white; font-size: 16px; }
     </style>
 </head>
 <body>
@@ -31,35 +31,46 @@
     </div>
 
     <div id="home-section" class="section" style="display: block; text-align: center;">
-        <h2>🎰 Lobby</h2>
-        <p>¡Bienvenido al juego de los Animalitos!</p>
-        </div>
+        <h2 style="color: #ffcc00;">🎰 Lobby</h2>
+        <div style="margin-top: 50px; font-size: 50px;">🎰</div>
+        <p>¡Pronto podrás jugar a los animalitos aquí!</p>
+    </div>
 
     <div id="tasks-section" class="section">
         <h2 style="text-align: center;">📋 Tareas Diarias</h2>
-        <div style="background: #2a2a2a; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="background: #2a2a2a; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border: 1px solid #444;">
             <div>
                 <p style="margin:0; font-weight:bold;">Ver Publicidad</p>
                 <small style="color: #4caf50;">Recompensa: +10 🥬</small>
             </div>
-            <button onclick="verAnuncio()" style="background:#0088cc; color:white; border:none; padding:8px 15px; border-radius:8px;">Ver</button>
+            <button onclick="verAnuncio()" style="background:#0088cc; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:bold;">VER</button>
         </div>
     </div>
 
     <div id="wallet-section" class="section" style="text-align: center;">
-        <h2>💰 Mi Billetera</h2>
-        <div style="background: #2a2a2a; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
-            <p style="margin: 0; color: #aaa;">Saldo Actual</p>
-            <h1 style="margin: 10px 0;"><span id="wallet-coins-display">0</span> 🥬</h1>
+        <h2 style="color: #4caf50;">💰 Mi Billetera</h2>
+        <div style="background: #2a2a2a; padding: 25px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #333;">
+            <p style="margin: 0; color: #aaa; font-size: 14px;">Saldo Actual</p>
+            <h1 style="margin: 10px 0; font-size: 40px;"><span id="wallet-coins-display">0</span> 🥬</h1>
         </div>
-        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">📥 Comprar 1,000 🥬 (0.1 TON)</button>
-        <button onclick="solicitarRetiro()" class="btn-action" style="background: #444;">📤 Retirar (Mín. 50,000 🥬)</button>
-        <p style="font-size: 11px; color: #777;">* Retiros manuales para tu seguridad.</p>
+        
+        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">
+            📥 Comprar 1,000 🥬 (0.1 TON)
+        </button>
+        
+        <button onclick="solicitarRetiro()" class="btn-action" style="background: #333; border: 1px solid #555;">
+            📤 Retirar (Mín. 50,000 🥬)
+        </button>
+        
+        <p style="font-size: 11px; color: #777; line-height: 1.4;">
+            * Los retiros son procesados manualmente por seguridad.<br>
+            Asegúrate de estar en <b>TON Testnet</b>.
+        </p>
     </div>
 
     <div id="referrals-section" class="section" style="text-align: center;">
         <h2>👥 Amigos</h2>
-        <p>Invita a tus amigos y gana comisiones.</p>
+        <p>¡Invita a tus panas y gana lechugas!</p>
     </div>
 
     <div class="nav-bar">
