@@ -1,62 +1,53 @@
-// 1. ELIMINAMOS DUPLICADOS: Declaramos 'tg' de forma segura
-if (typeof tg === 'undefined') {
-    window.tg = window.Telegram.WebApp;
-}
-tg.expand();
+// Usamos un objeto global para evitar errores de "ya declarado"
+window.LottoApp = {
+    tg: window.Telegram.WebApp,
+    tonConnect: null,
+    saldoLechugas: 0
+};
 
-// 2. INICIALIZACIÓN SEGURA DE TON CONNECT
-let tonConnectUI;
+// Expandir la app
+LottoApp.tg.expand();
 
-function initTonConnect() {
+// Función de inicialización
+function iniciarSistema() {
+    console.log("Iniciando componentes...");
+
+    // 1. Inicializar TON Connect de forma segura
     try {
         if (typeof TONConnectUI !== 'undefined') {
-            tonConnectUI = new TONConnectUI.TonConnectUI({
+            LottoApp.tonConnect = new TONConnectUI.TonConnectUI({
                 manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                 buttonRootId: 'ton-connect-button'
             });
-            console.log("✅ TON Connect cargado");
-            
-            // Configurar el escucha de cambios de billetera
-            tonConnectUI.onStatusChange(wallet => {
-                const details = document.getElementById('wallet-details');
-                if (wallet) {
-                    details.style.display = 'block';
-                    document.getElementById('wallet-address').innerText = 
-                        wallet.account.address.substring(0, 6) + "..." + wallet.account.address.slice(-4);
-                } else {
-                    details.style.display = 'none';
-                }
-            });
+            console.log("✅ Billetera lista");
         } else {
-            console.error("❌ La librería TON no está presente en el HTML");
+            console.error("❌ Error: La librería externa de TON no cargó.");
         }
-    } catch (e) {
-        console.error("❌ Error en initTonConnect:", e);
+    } catch (err) {
+        console.error("❌ Error al crear objeto TON:", err);
+    }
+
+    // 2. Cargar nombre de usuario
+    if (LottoApp.tg.initDataUnsafe.user) {
+        document.getElementById('user-name').innerText = LottoApp.tg.initDataUnsafe.user.first_name;
     }
 }
 
-// 3. NAVEGACIÓN (Lobby, Tareas, etc)
-function showSection(sectionId) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(s => {
-        const el = document.getElementById(s + '-section');
-        if (el) el.style.display = (s === sectionId) ? 'block' : 'none';
+// Cambiar pestañas
+function showSection(id) {
+    const capsulas = ['home', 'tasks', 'wallet', 'referrals'];
+    capsulas.forEach(c => {
+        const div = document.getElementById(c + '-section');
+        if (div) div.style.display = (c === id) ? 'block' : 'none';
     });
 }
 
-// 4. FUNCIONES DE PRUEBA
-let saldoLechugas = 0;
+// Ganar lechugas (Prueba)
 function mostrarAnuncio() {
-    saldoLechugas += 10;
-    document.getElementById('val-lechugas').innerText = saldoLechugas;
-    tg.showAlert("¡Ganaste 10 🥬!");
+    LottoApp.saldoLechugas += 10;
+    document.getElementById('val-lechugas').innerText = LottoApp.saldoLechugas;
+    LottoApp.tg.showAlert("¡Recibiste 10 🥬!");
 }
 
-// 5. ARRANCAR AL CARGAR
-window.onload = () => {
-    initTonConnect();
-    // Cargar nombre de usuario
-    if (tg.initDataUnsafe.user) {
-        document.getElementById('user-name').innerText = tg.initDataUnsafe.user.first_name;
-    }
-};
+// Ejecutar cuando la página cargue
+window.addEventListener('load', iniciarSistema);
