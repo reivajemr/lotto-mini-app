@@ -61,7 +61,7 @@ window.comprarLechugas = async function() {
     const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 300, 
         messages: [{
-            address: "TU_DIRECCION_TESTNET_AQUI", // <--- IMPORTANTE: Pon tu billetera de prueba
+            address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", // <--- IMPORTANTE: Pon tu billetera de prueba
             amount: "100000000", // 0.1 TON
         }]
     };
