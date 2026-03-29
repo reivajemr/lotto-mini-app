@@ -1,90 +1,97 @@
+// Configuración inicial de la WebApp de Telegram
 const tg = window.Telegram.WebApp;
-tg.expand();
-let tonConnectUI;
+tg.expand(); // Expande la app para que ocupe toda la pantalla
 
-// 1. NAVEGACIÓN UNIFICADA (Elimina el error 'irAWallet is not defined')
-window.showSection = function(id) {
-    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-    const target = document.getElementById(id + '-section');
+// Función para cambiar entre secciones (Lobby, Tareas, Wallet, etc.)
+function showSection(sectionId) {
+    // Ocultar todas las secciones
+    document.querySelectorAll('.section').forEach(section => {
+        section.classList.remove('active');
+    });
+    // Mostrar la sección seleccionada
+    const target = document.getElementById(sectionId);
     if (target) {
-        target.style.display = 'block';
-        // Sincronizamos el número grande de la wallet
-        if (id === 'wallet') {
-            document.getElementById('wallet-coins-display').innerText = document.getElementById('user-coins').innerText;
-        }
+        target.classList.add('active');
     }
-};
+}
 
-// 2. CARGA INICIAL
-window.onload = function() {
-    const user = tg.initDataUnsafe.user;
-    if (user) {
-        document.getElementById('user-name').innerText = user.first_name;
-        
-        // Cargar saldo real desde MongoDB
-        fetch('/api/user', {
+// FUNCIÓN CRÍTICA: Cargar el saldo desde MongoDB
+async function cargarSaldo() {
+    // Obtenemos tu ID real directamente de Telegram
+    const userData = tg.initDataUnsafe.user;
+    
+    if (!userData || !userData.id) {
+        console.error("No se pudo obtener el ID de Telegram");
+        return;
+    }
+
+    try {
+        // Llamada a tu API en Vercel
+        const response = await fetch('/api/user', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                telegramId: userData.id.toString(), // Enviamos el ID como string para asegurar coincidencia
+                username: userData.username || userData.first_name
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error en el servidor: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Si el servidor responde con éxito, actualizamos la interfaz
+        if (data && data.coins !== undefined) {
+            // Actualiza el número de lechugas en el Lobby y en la Wallet
+            const balanceElements = document.querySelectorAll('#balance, .lechugas-count');
+            balanceElements.forEach(el => {
+                el.innerText = data.coins.toLocaleString(); 
+            });
+            console.log("Saldo sincronizado:", data.coins);
+        }
+    } catch (error) {
+        console.error("Error al sincronizar con MongoDB:", error);
+        // Opcional: Mostrar la alerta de error que vimos antes
+        // alert("Error al sincronizar. Si recargas podrías perder el saldo actual.");
+    }
+}
+
+// Función para simular o procesar una compra (Ejemplo)
+async function comprarLechugas(cantidad) {
+    const userData = tg.initDataUnsafe.user;
+    
+    try {
+        const response = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id, username: user.first_name })
-        })
-        .then(res => res.json())
-        .then(data => {
-            const coins = data.coins || 0;
-            document.getElementById('user-coins').innerText = coins;
-            document.getElementById('wallet-coins-display').innerText = coins;
-        })
-        .catch(err => console.log("Error de conexión al cargar saldo"));
-    }
-
-    setTimeout(() => {
-        if (window.TON_CONNECT_UI) {
-            tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-                manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-                buttonRootId: 'ton-connect',
-                network: 'testnet' 
-            });
+            body: JSON.stringify({ 
+                telegramId: userData.id.toString(),
+                username: userData.username || userData.first_name,
+                reward: cantidad // Enviamos la recompensa para que la API la sume
+            })
+        });
+        
+        if (response.ok) {
+            await cargarSaldo(); // Recargamos el saldo visualmente
+            tg.HapticFeedback.notificationOccurred('success'); // Vibración de éxito
         }
-    }, 1000);
-};
-
-// 3. COMPRA Y GUARDADO PERMANENTE
-window.comprarLechugas = async function() {
-    const tx = {
-        validUntil: Math.floor(Date.now() / 1000) + 300, 
-        messages: [{ address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", amount: "100000000" }]
-    };
-    try {
-        const result = await tonConnectUI.sendTransaction(tx);
-        if (result) {
-            tg.showConfirm("✅ Pago confirmado. ¿Deseas sumar tus 1,000 lechugas?", (ok) => {
-                if(ok) guardarEnBaseDeDatos(1000);
-            });
-        }
-    } catch (e) {
-        tg.showAlert("Transacción cancelada.");
+    } catch (error) {
+        console.error("Error en la compra:", error);
     }
-};
-
-function guardarEnBaseDeDatos(cantidad) {
-    const user = tg.initDataUnsafe.user;
-    
-    // Suma visual inmediata
-    let actual = parseInt(document.getElementById('user-coins').innerText) || 0;
-    let nuevoTotal = actual + cantidad;
-    document.getElementById('user-coins').innerText = nuevoTotal;
-    document.getElementById('wallet-coins-display').innerText = nuevoTotal;
-
-    // GUARDADO REAL EN MONGODB
-    fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId: user.id, reward: cantidad })
-    })
-    .then(res => {
-        if(res.ok) tg.showAlert("¡Saldo guardado permanentemente!");
-        else throw new Error();
-    })
-    .catch(() => {
-        tg.showAlert("⚠️ Error al sincronizar. Si recargas podrías perder el saldo actual.");
-    });
 }
+
+// EJECUCIÓN AL CARGAR LA APP
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Mostrar el nombre del usuario en la interfaz
+    const userNameElement = document.getElementById('user-name');
+    if (userNameElement && tg.initDataUnsafe.user) {
+        userNameElement.innerText = tg.initDataUnsafe.user.first_name;
+    }
+
+    // 2. Cargar el saldo inicial desde la base de datos
+    cargarSaldo();
+});
