@@ -2,79 +2,60 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 window.onload = function() {
-    // 1. Cargar datos del usuario
     const user = tg.initDataUnsafe.user;
+    
     if (user) {
+        // 1. Mostrar datos básicos de Telegram de inmediato
+        document.getElementById('user-name').innerText = user.first_name;
         if (user.photo_url) {
             document.getElementById('user-avatar').src = user.photo_url;
         }
+
+        // 2. CONEXIÓN A MONGODB: Pedir monedas y gemas reales
+        fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                telegramId: user.id, 
+                username: user.first_name 
+            })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('Error en la red');
+            return res.json();
+        })
+        .then(data => {
+            // Reemplaza los ceros por los valores de la base de datos
+            document.getElementById('user-coins').innerText = data.coins || 500;
+            document.getElementById('user-gems').innerText = (data.gems || 0).toFixed(2);
+            console.log("✅ Datos cargados desde MongoDB Atlas");
+        })
+        .catch(err => console.error("❌ Error al conectar con la API:", err));
     }
 
-    // 2. Iniciar Billetera con detección forzada
+    // 3. Iniciar Billetera (Botón compacto a la derecha)
+    iniciarBilleteraSegura();
+};
+
+function iniciarBilleteraSegura() {
     let intentos = 0;
     const interval = setInterval(() => {
-        const TonLib = window.TON_CONNECT_UI;
-        intentos++;
-
-        if (TonLib && TonLib.TonConnectUI) {
+        if (window.TON_CONNECT_UI) {
             clearInterval(interval);
-            try {
-                new TonLib.TonConnectUI({
-                    manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-                    buttonRootId: 'ton-connect',
-                    uiOptions: {
-                        buttonConfiguration: {
-                            size: 'medium', // Probamos medium para asegurar visibilidad
-                            borderRadius: 'm'
-                        }
+            new TON_CONNECT_UI.TonConnectUI({
+                manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
+                buttonRootId: 'ton-connect',
+                uiOptions: {
+                    buttonConfiguration: {
+                        size: 'small',
+                        borderRadius: 's'
                     }
-                });
-                console.log("✅ Billetera renderizada");
-            } catch (e) {
-                console.error("Error TON:", e);
-            }
-        } 
-        
-        if (intentos > 20) { // Si después de 10 segundos no carga, detenemos
-            clearInterval(interval);
-            console.log("❌ Tiempo de espera agotado para la librería");
+                }
+            });
+            console.log("💎 Billetera lista en el header");
         }
+        if (intentos++ > 20) clearInterval(interval);
     }, 500);
-};
+}
 
-// Navegación
-window.showSection = function(sectionId) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(id => {
-        const el = document.getElementById(id + '-section');
-        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
-    });
-};
-
-// Generar Animalitos
-const animalitos = [
-    "00. Ballena", "0. Delfín", "1. Carnero", "2. Toro", "3. Chivo", "4. Alacrán", "5. León", "6. Rana", 
-    "7. Perico", "8. Ratón", "9. Águila", "10. Tigre", "11. Gato", "12. Caballo", "13. Mono", "14. Paloma", 
-    "15. Zorro", "16. Oso", "17. Pavo", "18. Burro", "19. Chivo", "20. Cochino", "21. Gallo", "22. Camello", 
-    "23. Cebra", "24. Iguana", "25. Gallina", "26. Vaca", "27. Perro", "28. Zamuro", "29. Elefante", 
-    "30. Caimán", "31. Lapa", "32. Ardilla", "33. Pescado", "34. Venado", "35. Jirafa", "36. Culebra"
-];
-
-window.generarTablero = function() {
-    const grid = document.getElementById('grid-animalitos');
-    const btnJugar = document.getElementById('btn-jugar');
-    if (!grid) return;
-    grid.innerHTML = ''; 
-    if (btnJugar) btnJugar.style.display = 'none';
-
-    animalitos.forEach((animal) => {
-        const div = document.createElement('div');
-        div.style.cssText = "background: #2a2a2a; color: white; padding: 12px 5px; text-align: center; border-radius: 10px; font-size: 11px; font-weight: bold; cursor: pointer; border: 1px solid #444;";
-        div.innerText = animal;
-        div.onclick = () => {
-            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-            alert("Selección: " + animal);
-        };
-        grid.appendChild(div);
-    });
-};
+// ... Mantén aquí abajo tus funciones de showSection y generarTablero
