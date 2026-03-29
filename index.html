@@ -7,21 +7,32 @@
 </head>
 <body>
     <div id="app">
-        <header class="user-header">
-            <div class="user-info">
-                <img src="icon.png" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%;">
-                <span id="user-name">Cargando...</span>
+        <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #1a1a1a; border-bottom: 1px solid #333;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <img src="icon.png" id="user-avatar" style="width: 35px; height: 35px; border-radius: 50%; border: 1px solid #444;">
+        <span id="user-name" style="font-size: 14px; font-weight: bold;">Cargando...</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+        <div style="display: flex; align-items: center; gap: 15px; background: #2a2a2a; padding: 5px 12px; border-radius: 20px;">
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <span style="font-size: 14px; color: #ffcc00;">🟡</span> 
+                <span id="user-coins" style="font-weight: bold;">0</span>
             </div>
-            <div class="balances">
-                <div class="balance-item">🥬 <span id="val-lechugas">0</span></div>
-                <div class="balance-item">💎 <span id="val-ton">0.00</span></div>
+            <div style="display: flex; align-items: center; gap: 5px;">
+                <span style="font-size: 14px; color: #00ccff;">💎</span> 
+                <span id="user-gems" style="font-weight: bold;">0.00</span>
             </div>
-        </header>
+        </div>
+        
+        <div id="ton-connect"></div>
+    </div>
+</header>
 
         <main id="main-content">
 <section id="home-section">
     <h2 style="text-align: center;">🎰 Lobby</h2>
-    <div id="ton-connect" style="display: flex; justify-content: center; margin-top: 20px;"></div>
+   
 </section>
             <section id="tasks-section" style="display: none;">
                 <h2>📺 Gana Lechugas Gratis</h2>
