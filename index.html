@@ -7,25 +7,28 @@
 </head>
 <body>
     <div id="app">
-        <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #1a1a1a; border-bottom: 1px solid #333;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <img src="icon.png" id="user-avatar" style="width: 35px; height: 35px; border-radius: 50%; border: 1px solid #444;">
-        <span id="user-name" style="font-size: 14px; font-weight: bold;"></span>
+       <header style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #1a1a1a; border-bottom: 1px solid #333; height: 60px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="position: relative;">
+            <img src="icon.png" id="user-avatar" style="width: 45px; height: 45px; border-radius: 50%; border: 2px solid #0088cc; object-fit: cover;">
+            <div style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; background: #28a745; border-radius: 50%; border: 2px solid #1a1a1a;"></div>
+        </div>
+        <span id="user-name" style="font-size: 15px; font-weight: bold; color: white;">Cargando...</span>
     </div>
 
-    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
-        <div style="display: flex; align-items: center; gap: 15px; background: #2a2a2a; padding: 5px 12px; border-radius: 20px;">
-            <div style="display: flex; align-items: center; gap: 5px;">
-                <span style="font-size: 14px; color: #ffcc00;">🟡</span> 
-                <span id="user-coins" style="font-weight: bold;">0</span>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 10px; background: #2a2a2a; padding: 4px 10px; border-radius: 15px; margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <span>🟡</span> 
+                <span id="user-coins" style="font-weight: bold; font-size: 13px;">0</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 5px;">
-                <span style="font-size: 14px; color: #00ccff;">💎</span> 
-                <span id="user-gems" style="font-weight: bold;">0.00</span>
+            <div style="display: flex; align-items: center; gap: 4px;">
+                <span>💎</span> 
+                <span id="user-gems" style="font-weight: bold; font-size: 13px;">0.00</span>
             </div>
         </div>
         
-        <div id="ton-connect"></div>
+        <div id="ton-connect" style="transform: scale(0.85); transform-origin: right;"></div>
     </div>
 </header>
 
