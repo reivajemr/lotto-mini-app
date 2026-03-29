@@ -4,10 +4,18 @@ tg.expand(); // Abre la app a pantalla completa al iniciar
 
 // 2. CONFIGURACIÓN DE TON CONNECT (Billetera)
 // IMPORTANTE: Asegúrate de que el manifestUrl sea EXACTO al de tu Vercel
-const tonConnectUI = new TONConnectUI.TonConnectUI({
-    manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-    buttonRootId: 'ton-connect-button'
-});
+// Cambia el inicio de tu app.js por esto:
+let tonConnectUI;
+
+try {
+    tonConnectUI = new TONConnectUI.TonConnectUI({
+        manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
+        buttonRootId: 'ton-connect-button'
+    });
+    console.log("TON Connect inicializado");
+} catch (e) {
+    console.error("Error al cargar TON Connect:", e);
+}
 
 // 3. VARIABLES DE ESTADO (Saldo local para pruebas)
 let saldoLechugas = 0;
