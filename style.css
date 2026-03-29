@@ -1,120 +1,146 @@
+/* style.css - Diseño Profesional */
 :root {
-    --bg-color: #1c1c1c;
-    --card-bg: #2d2d2d;
+    --bg-color: #1a1a1a;
     --text-color: #ffffff;
-    --accent: #0088cc; /* Azul Telegram */
-    --success: #4caf50; /* Verde Lechuga */
+    --primary-blue: #0088cc; /* El azul oficial de Telegram */
+    --hover-blue: #00aaff;
+    --nav-bg: #2d2d2d;
+    --icon-size: 24px;
 }
 
-body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    font-family: sans-serif;
+* {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-.user-header {
-    display: flex;
-    justify-content: space-between;
-    padding: 15px;
-    background: var(--card-bg);
-    border-bottom: 1px solid #444;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.5;
+    user-select: none; /* Evita que el usuario seleccione texto */
 }
 
-.balances {
-    text-align: right;
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Encabezado Profesional */
+header {
+    background-color: var(--nav-bg);
+    padding: 15px;
+    border-bottom: 1px solid #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+}
+
+#user-name {
+    font-size: 1.2em;
     font-weight: bold;
 }
 
-.bottom-nav {
-    position: fixed;
-    bottom: 0;
-    width: 100%;
+.balance-container {
     display: flex;
-    background: var(--card-bg);
+    align-items: center;
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.lechuga-icon {
+    width: var(--icon-size);
+    height: var(--icon-size);
+}
+
+#balance {
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+/* Botón Conectar Wallet (EL BOTÓN AZUL) */
+.wallet-btn {
+    background-color: var(--primary-blue);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s;
+}
+
+.wallet-btn:hover {
+    background-color: var(--hover-blue);
+}
+
+.wallet-btn:active {
+    transform: translateY(1px);
+}
+
+/* Sección de Contenido */
+main {
+    flex: 1;
+    overflow-y: auto; /* Permite scroll si el contenido es largo */
+    padding: 20px;
+}
+
+.section {
+    display: none;
+}
+
+.section.active {
+    display: block;
+}
+
+.section h1 {
+    font-size: 1.8em;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.section p {
+    text-align: center;
+    color: #aaa;
+}
+
+/* Navegación Inferior */
+.bottom-nav {
+    background-color: var(--nav-bg);
+    display: flex;
+    justify-content: space-around;
     padding: 10px 0;
     border-top: 1px solid #444;
 }
 
-.bottom-nav button {
-    flex: 1;
+.nav-item {
     background: none;
     border: none;
     color: #aaa;
-    font-size: 12px;
-}
-
-.btn-play {
-    display: block;
-    width: 80%;
-    margin: 40px auto;
-    padding: 20px;
-    background: var(--success);
-    color: white;
-    border: none;
-    border-radius: 15px;
-    font-size: 1.2rem;
-    font-weight: bold;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-.task-card {
-    background: var(--card-bg);
-    margin: 10px;
-    padding: 15px;
-    border-radius: 12px;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    border: 1px solid #333;
-}
-
-.task-info span {
-    display: block;
-    font-weight: bold;
-}
-
-.task-info small {
-    color: var(--success);
-}
-
-.btn-task {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 8px;
-    font-weight: bold;
-}
-.wallet-card {
-    background: linear-gradient(145deg, #2d2d2d, #252525);
-    margin: 15px;
-    padding: 20px;
-    border-radius: 20px;
-    text-align: center;
-    border: 1px solid #444;
-}
-
-#ton-connect {
-    display: flex;
-    justify-content: center;
-    margin: 20px 0;
-}
-
-.wallet-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-.btn-deposit, .btn-withdraw {
-    flex: 1;
-    padding: 12px;
-    border-radius: 10px;
-    border: none;
-    font-weight: bold;
     cursor: pointer;
+    font-size: 0.9em;
+    gap: 5px;
 }
 
-.btn-deposit { background: var(--accent); color: white; }
-.btn-withdraw { background: #444; color: white; }
+.nav-item.active {
+    color: var(--primary-blue);
+    font-weight: bold;
+}
+
+.nav-item .icon {
+    font-size: 1.5em; /* Tamaño de los iconos/emojis */
+}
