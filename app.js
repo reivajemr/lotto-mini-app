@@ -1,24 +1,16 @@
-// Asegurar que Telegram inicie
-window.Telegram.WebApp.expand();
-
-// Inyección directa sin retrasos
 window.addEventListener('DOMContentLoaded', () => {
     try {
         const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
             manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-            buttonRootId: 'ton-connect'
+            buttonRootId: 'ton-connect',
+            uiOptions: {
+                buttonConfiguration: {
+                    size: 'small' // Lo hace más pequeño para que quepa en el header
+                }
+            }
         });
-        console.log("🚀 Billetera inyectada en el DOM");
+        console.log("🚀 Billetera movida al header");
     } catch (e) {
-        console.error("❌ Fallo al inyectar TON:", e);
+        console.error("❌ Fallo al mover la billetera:", e);
     }
 });
-
-// Mantén tu función de navegación igual
-window.showSection = function(id) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(s => {
-        const el = document.getElementById(s + '-section');
-        if (el) el.style.display = (s === id) ? 'block' : 'none';
-    });
-};
