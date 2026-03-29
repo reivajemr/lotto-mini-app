@@ -14,16 +14,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Inicializar Billetera TON (Botón compacto en header)
     try {
-        const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-            manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-            buttonRootId: 'ton-connect',
-            uiOptions: {
-                buttonConfiguration: {
-                    size: 'small',
-                    borderRadius: 'm'
-                }
-            }
-        });
+      const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+    manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
+    buttonRootId: 'ton-connect',
+    uiOptions: {
+        buttonConfiguration: {
+            size: 'small', // Obligatorio para que sea chico
+            borderRadius: 's'
+        }
+    }
+});
     } catch (e) {
         console.error("Error al cargar la billetera:", e);
     }
