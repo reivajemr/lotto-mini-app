@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Animalito Lotto</title>
-    <link rel="stylesheet" href="style.css"> <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
     <div id="app">
@@ -12,12 +13,12 @@
             <div class="user-info">
                 <span id="user-name">Cargando...</span>
                 <div class="balance-container">
-                    <img src="lechuga.png" alt="" class="lechuga-icon">
+                    <span class="icon">🥬</span> 
                     <span id="balance">0</span>
                 </div>
             </div>
             <button id="connect-wallet-btn" class="wallet-btn">
-                <img src="wallet-icon.png" alt="" class="icon"> Connect Wallet
+                Connect Wallet
             </button>
         </header>
 
@@ -27,41 +28,32 @@
                 <p>¡Bienvenido a Animalito Lotto!</p>
             </div>
 
-            <div id="tasks" class="section">
+            <div id="tasks" class="section" style="display:none;">
                 <h1>📋 Tareas</h1>
                 <p>Completa misiones para ganar lechugas.</p>
             </div>
 
-            <div id="wallet" class="section">
+            <div id="wallet" class="section" style="display:none;">
                 <h1>👛 Wallet</h1>
                 <p>Gestiona tus fondos.</p>
-                <div class="p-20 text-center">
-                    <h3 class="mb-10">Tu Saldo Actual: <span class="lechuga-count">0</span> Lechugas</h3>
-                    <button class="wallet-btn" onclick="comprarLechugas(1000)" style="margin: 0 auto;">
-                        Obtener 1000 Lechugas Extra
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="wallet-btn" onclick="alert('Funcionalidad de compra en desarrollo')">
+                        Comprar 1000 Lechugas
                     </button>
                 </div>
             </div>
 
-            <div id="referrals" class="section">
+            <div id="referrals" class="section" style="display:none;">
                 <h1>👥 Amigos</h1>
                 <p>Invita y gana bonificaciones.</p>
             </div>
         </main>
 
         <nav class="bottom-nav">
-            <button class="nav-item active" onclick="showSection('lobby')">
-                <span class="icon">🏠</span> Lobby
-            </button>
-            <button class="nav-item" onclick="showSection('tasks')">
-                <span class="icon">📋</span> Tareas
-            </button>
-            <button class="nav-item" onclick="showSection('wallet')">
-                <span class="icon">👛</span> Wallet
-            </button>
-            <button class="nav-item" onclick="showSection('referrals')">
-                <span class="icon">👥</span> Amigos
-            </button>
+            <button class="nav-item" onclick="showSection('lobby')">🏠 Lobby</button>
+            <button class="nav-item" onclick="showSection('tasks')">📋 Tareas</button>
+            <button class="nav-item" onclick="showSection('wallet')">👛 Wallet</button>
+            <button class="nav-item" onclick="showSection('referrals')">👥 Amigos</button>
         </nav>
     </div>
     <script src="app.js"></script>
