@@ -2,50 +2,23 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 let tonConnectUI;
 
-// 1. NAVEGACIÓN
 window.showSection = function(id) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(s => {
-        const el = document.getElementById(s + '-section');
-        if (el) el.style.display = (s === id) ? 'block' : 'none';
-    });
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+    document.getElementById(id + '-section').style.display = 'block';
 };
 
-// Función para entrar a Wallet y actualizar el número grande
-window.btnWallet = function() {
+window.irAWallet = function() {
     showSection('wallet');
-    const saldo = document.getElementById('user-coins').innerText;
-    document.getElementById('wallet-coins-display').innerText = saldo;
+    document.getElementById('wallet-coins-display').innerText = document.getElementById('user-coins').innerText;
 };
 
-// 2. INICIO
 window.onload = function() {
-    // Quitamos la carga de inmediato
-    const loader = document.getElementById('loading-screen');
-    if (loader) loader.style.display = 'none';
-
     const user = tg.initDataUnsafe.user;
     if (user) {
         document.getElementById('user-name').innerText = user.first_name;
-        
-        // Cargar saldo de la DB
-        fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id, username: user.first_name })
-        })
-        .then(res => res.json())
-        .then(data => {
-            const coins = data.coins || 0;
-            document.getElementById('user-coins').innerText = coins;
-            if(document.getElementById('wallet-coins-display')) {
-                document.getElementById('wallet-coins-display').innerText = coins;
-            }
-        })
-        .catch(err => console.log("Error de conexión con base de datos"));
+        cargarDatosDB(user.id, user.first_name);
     }
 
-    // Inicializar TonConnect con retraso
     setTimeout(() => {
         if (window.TON_CONNECT_UI) {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -57,49 +30,61 @@ window.onload = function() {
     }, 1000);
 };
 
-// 3. COMPRA Y SALDO
+// Función para cargar datos con protección contra fallos
+async function cargarDatosDB(id, name) {
+    try {
+        const res = await fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegramId: id, username: name })
+        });
+        const data = await res.json();
+        const coins = data.coins ?? 0;
+        document.getElementById('user-coins').innerText = coins;
+        document.getElementById('wallet-coins-display').innerText = coins;
+    } catch (e) {
+        console.error("Error cargando saldo:", e);
+    }
+}
+
 window.comprarLechugas = async function() {
     const tx = {
         validUntil: Math.floor(Date.now() / 1000) + 300, 
         messages: [{ address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", amount: "100000000" }]
     };
+
     try {
         const result = await tonConnectUI.sendTransaction(tx);
         if (result) {
-            tg.showAlert("✅ Pago exitoso.");
-            sumarLechugasDB(1000); 
+            tg.showAlert("✅ ¡Pago confirmado!");
+            guardarCompra(1000);
         }
     } catch (e) {
         tg.showAlert("Transacción cancelada.");
     }
 };
 
-function sumarLechugasDB(cantidad) {
+// FUNCIÓN CLAVE: Guarda y actualiza la UI
+async function guardarCompra(cantidad) {
     const user = tg.initDataUnsafe.user;
-    // Capturamos el saldo actual para sumar (evitamos undefined)
-    const saldoActual = parseInt(document.getElementById('user-coins').innerText) || 0;
-    const nuevoTotal = saldoActual + cantidad;
-
-    // Actualización visual inmediata
+    
+    // 1. Suma visual inmediata (para que el usuario vea el cambio)
+    let actual = parseInt(document.getElementById('user-coins').innerText) || 0;
+    let nuevoTotal = actual + cantidad;
     document.getElementById('user-coins').innerText = nuevoTotal;
-    if(document.getElementById('wallet-coins-display')) {
-        document.getElementById('wallet-coins-display').innerText = nuevoTotal;
+    document.getElementById('wallet-coins-display').innerText = nuevoTotal;
+
+    // 2. Intento de guardado en base de datos
+    try {
+        const response = await fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegramId: user.id, reward: cantidad })
+        });
+        
+        if (!response.ok) throw new Error("Fallo en servidor");
+        console.log("Guardado exitoso en DB");
+    } catch (e) {
+        tg.showAlert("⚠️ Error al sincronizar con el servidor. Tu saldo se actualizará en la próxima carga.");
     }
-
-    // Guardar en MongoDB
-    fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId: user.id, reward: cantidad })
-    });
 }
-
-window.verAnuncio = function() {
-    tg.showAlert("El sistema de anuncios está en mantenimiento.");
-};
-
-window.solicitarRetiro = function() {
-    const balance = parseInt(document.getElementById('user-coins').innerText) || 0;
-    if (balance < 50000) return tg.showAlert("Mínimo 50,000 🥬 para retirar.");
-    tg.showAlert("Solicitud enviada a revisión.");
-};
