@@ -6,12 +6,12 @@
     <title>Animalito Lotto</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; overflow-x: hidden; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 100; }
-        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; z-index: 100; }
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; }
         .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; }
-        .section { padding: 20px; display: none; padding-bottom: 100px; min-height: 80vh; text-align: center; }
-        .btn-action { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 15px; cursor: pointer; color: white; font-size: 16px; }
+        .section { padding: 20px; display: none; padding-bottom: 100px; text-align: center; }
+        .btn-action { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 15px; color: white; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -29,30 +29,18 @@
         <p>¡Bienvenido!</p>
     </div>
 
-    <div id="tasks-section" class="section">
-        <h2>📋 Tareas</h2>
-        <button onclick="tg.showAlert('Próximamente')" class="btn-action" style="background: #333;">🎬 Ver Anuncio</button>
-    </div>
-
     <div id="wallet-section" class="section">
-        <h2 style="color: #4caf50;">💰 Wallet</h2>
-        <div style="background: #2a2a2a; padding: 25px; border-radius: 20px; margin-bottom: 25px;">
+        <h2 style="color: #4caf50;">💰 Mi Billetera</h2>
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
             <h1 id="wallet-coins-display" style="font-size: 40px; margin: 0;">0</h1>
-            <p style="margin: 5px 0 0; color: #aaa;">Lechugas</p>
+            <p>Lechugas</p>
         </div>
         <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">📥 Comprar 1,000 🥬</button>
     </div>
 
-    <div id="referrals-section" class="section">
-        <h2>👥 Amigos</h2>
-        <p>Próximamente</p>
-    </div>
-
     <div class="nav-bar">
         <button onclick="showSection('home')">🏠<br>Lobby</button>
-        <button onclick="showSection('tasks')">📋<br>Tareas</button>
-        <button onclick="irAWallet()">💰<br>Wallet</button>
-        <button onclick="showSection('referrals')">👥<br>Amigos</button>
+        <button onclick="showSection('wallet')">💰<br>Wallet</button>
     </div>
 
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js" defer></script>
