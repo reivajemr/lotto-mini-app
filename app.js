@@ -1,59 +1,31 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-function showSection(sectionId) {
-    document.querySelectorAll('.section').forEach(section => {
-        section.classList.remove('active');
-    });
-    const target = document.getElementById(sectionId);
-    if (target) {
-        target.classList.add('active');
-    }
-}
-
-async function cargarSaldo() {
-    const userData = tg.initDataUnsafe.user;
-    
-    if (!userData || !userData.id) {
-        console.error("No se detectó usuario de Telegram");
-        return;
-    }
+async function cargarDatos() {
+    const user = tg.initDataUnsafe.user;
+    if (!user) return;
 
     try {
         const response = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                telegramId: userData.id.toString(), 
-                username: userData.username || userData.first_name
-            })
+            body: JSON.stringify({ telegramId: user.id.toString() })
         });
 
         const data = await response.json();
-        console.log("Datos recibidos:", data);
+        console.log("Datos para mostrar:", data);
 
-        // ACTUALIZACIÓN SEGURA: Solo cambia el texto si el ID existe en el HTML
-        const balanceEl = document.getElementById('balance');
-        if (balanceEl && data.coins !== undefined) {
-            balanceEl.innerText = data.coins;
+        // Si el elemento con id="balance" existe, ponemos las lechugas
+        const balanceElement = document.getElementById('balance');
+        if (balanceElement && data.coins !== undefined) {
+            balanceElement.innerText = data.coins;
+            console.log("¡Saldo actualizado en pantalla!");
         }
 
-        const nameEl = document.getElementById('user-name');
-        if (nameEl) {
-            nameEl.innerText = userData.first_name || "Usuario";
-        }
-
-    } catch (error) {
-        console.error("Error en cargarSaldo:", error);
+    } catch (e) {
+        console.error("Error al pintar datos:", e);
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Forzamos la aparición de botones principales
-    const walletBtn = document.querySelector('.wallet-btn') || document.querySelector('[onclick*="wallet"]');
-    if (walletBtn) {
-        walletBtn.style.display = 'flex';
-    }
-    
-    cargarSaldo();
-});
+// Ejecutar cuando la página cargue
+document.addEventListener('DOMContentLoaded', cargarDatos);
