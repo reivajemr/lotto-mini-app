@@ -1,38 +1,51 @@
-// Usamos un nombre único para evitar el error de "Already declared"
 window.LottoProyecto = {
     tg: window.Telegram.WebApp,
     ton: null
 };
 
-// Expandir la aplicación
 LottoProyecto.tg.expand();
 
-function inicializarTodo() {
-    console.log("🚀 Iniciando componentes del Lobby...");
+// Sistema de intentos para esperar la librería
+let intentos = 0;
 
-    // 1. Intentar cargar la billetera
+function intentarConectarWallet() {
+    // Si la librería ya descargó y está lista
     if (typeof TONConnectUI !== 'undefined') {
         try {
             LottoProyecto.ton = new TONConnectUI.TonConnectUI({
                 manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                 buttonRootId: 'ton-connect-button'
             });
-            console.log("✅ Botón de Wallet vinculado");
+            console.log("✅ Billetera conectada con éxito!");
         } catch (e) {
             console.error("❌ Error al crear objeto TON:", e);
         }
     } else {
-        console.error("❌ La librería TON no cargó. Verifica tu conexión a internet.");
+        // Si no está lista, vuelve a intentar en medio segundo (máximo 10 intentos)
+        intentos++;
+        if (intentos <= 10) {
+            console.log(`⏳ Esperando librería... (Intento ${intentos})`);
+            setTimeout(intentarConectarWallet, 500);
+        } else {
+            console.error("❌ Internet muy lento, recarga la Mini App.");
+        }
     }
+}
 
-    // 2. Nombre de usuario
+function inicializarTodo() {
+    console.log("🚀 Iniciando Lobby...");
+    
+    // Arrancar el buscador de la billetera
+    intentarConectarWallet();
+
+    // Cargar nombre
     const user = LottoProyecto.tg.initDataUnsafe.user;
     if (user) {
         document.getElementById('user-name').innerText = user.first_name;
     }
 }
 
-// Función de navegación
+// Navegación
 function showSection(id) {
     const capsulas = ['home', 'tasks', 'wallet', 'referrals'];
     capsulas.forEach(c => {
@@ -41,5 +54,4 @@ function showSection(id) {
     });
 }
 
-// Iniciar cuando la página esté lista
 window.onload = inicializarTodo;
