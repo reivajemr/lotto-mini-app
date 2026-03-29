@@ -2,21 +2,36 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 let tonConnectUI;
 
+// 1. NAVEGACIÓN UNIFICADA
 window.showSection = function(id) {
     document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-    document.getElementById(id + '-section').style.display = 'block';
-};
-
-window.irAWallet = function() {
-    showSection('wallet');
-    document.getElementById('wallet-coins-display').innerText = document.getElementById('user-coins').innerText;
+    const target = document.getElementById(id + '-section');
+    if (target) target.style.display = 'block';
+    
+    // Actualizar el display de la wallet si se entra ahí
+    if (id === 'wallet') {
+        const saldo = document.getElementById('user-coins').innerText;
+        document.getElementById('wallet-coins-display').innerText = saldo;
+    }
 };
 
 window.onload = function() {
     const user = tg.initDataUnsafe.user;
     if (user) {
         document.getElementById('user-name').innerText = user.first_name;
-        cargarDatosDB(user.id, user.first_name);
+        
+        // Cargar saldo inicial desde la base de datos
+        fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegramId: user.id, username: user.first_name })
+        })
+        .then(res => res.json())
+        .then(data => {
+            const coins = data.coins || 0;
+            document.getElementById('user-coins').innerText = coins;
+            document.getElementById('wallet-coins-display').innerText = coins;
+        });
     }
 
     setTimeout(() => {
@@ -30,61 +45,44 @@ window.onload = function() {
     }, 1000);
 };
 
-// Función para cargar datos con protección contra fallos
-async function cargarDatosDB(id, name) {
-    try {
-        const res = await fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: id, username: name })
-        });
-        const data = await res.json();
-        const coins = data.coins ?? 0;
-        document.getElementById('user-coins').innerText = coins;
-        document.getElementById('wallet-coins-display').innerText = coins;
-    } catch (e) {
-        console.error("Error cargando saldo:", e);
-    }
-}
-
+// 2. COMPRA CON GUARDADO PERMANENTE
 window.comprarLechugas = async function() {
     const tx = {
         validUntil: Math.floor(Date.now() / 1000) + 300, 
         messages: [{ address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", amount: "100000000" }]
     };
-
     try {
         const result = await tonConnectUI.sendTransaction(tx);
         if (result) {
-            tg.showAlert("✅ ¡Pago confirmado!");
-            guardarCompra(1000);
+            tg.showAlert("✅ Pago exitoso. Guardando en base de datos...");
+            sumarLechugasDB(1000);
         }
     } catch (e) {
-        tg.showAlert("Transacción cancelada.");
+        tg.showAlert("Transacción fallida.");
     }
 };
 
-// FUNCIÓN CLAVE: Guarda y actualiza la UI
-async function guardarCompra(cantidad) {
+function sumarLechugasDB(cantidad) {
     const user = tg.initDataUnsafe.user;
-    
-    // 1. Suma visual inmediata (para que el usuario vea el cambio)
-    let actual = parseInt(document.getElementById('user-coins').innerText) || 0;
-    let nuevoTotal = actual + cantidad;
+    const current = parseInt(document.getElementById('user-coins').innerText) || 0;
+    const nuevoTotal = current + cantidad;
+
+    // Actualización visual inmediata
     document.getElementById('user-coins').innerText = nuevoTotal;
     document.getElementById('wallet-coins-display').innerText = nuevoTotal;
 
-    // 2. Intento de guardado en base de datos
-    try {
-        const response = await fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id, reward: cantidad })
-        });
-        
-        if (!response.ok) throw new Error("Fallo en servidor");
-        console.log("Guardado exitoso en DB");
-    } catch (e) {
-        tg.showAlert("⚠️ Error al sincronizar con el servidor. Tu saldo se actualizará en la próxima carga.");
-    }
+    // PETICIÓN CRÍTICA: Guardar en MongoDB para que no se borre al recargar
+    fetch('/api/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            telegramId: user.id, 
+            reward: cantidad // Tu API debe sumar esto al saldo existente en MongoDB
+        })
+    })
+    .then(res => {
+        if(res.ok) console.log("Saldo guardado permanentemente");
+        else throw new Error();
+    })
+    .catch(() => tg.showAlert("⚠️ Error al guardar. Verifica tu conexión."));
 }
