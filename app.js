@@ -1,48 +1,48 @@
-// Usamos el objeto global para evitar conflictos
 window.LottoApp = window.LottoApp || {};
 window.LottoApp.tg = window.Telegram.WebApp;
 window.LottoApp.tg.expand();
 
-// --- FUNCIÓN DE NAVEGACIÓN (Arregla el error "not defined") ---
+// Navegación corregida
 window.showSection = function(sectionId) {
-    console.log("Cambiando a sección:", sectionId);
     const sections = ['home', 'tasks', 'wallet', 'referrals'];
     sections.forEach(id => {
         const el = document.getElementById(id + '-section');
-        if (el) {
-            el.style.display = (id === sectionId) ? 'block' : 'none';
-        }
+        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
     });
+
+    // Si entramos a la wallet, forzamos la creación del botón si no existe
+    if (sectionId === 'wallet') {
+        inicializarBilletera();
+    }
 };
 
-// --- INICIALIZACIÓN DE BILLETERA ---
 function inicializarBilletera() {
     const TONLib = window.TONConnectUI;
-    if (TONLib && TONLib.TonConnectUI) {
-        try {
-            if (!window.LottoApp.tonConnectUI) {
+    const buttonContainer = document.getElementById('ton-connect-button');
+    
+    // Solo intentamos si el contenedor existe y la librería cargó
+    if (buttonContainer && TONLib && TONLib.TonConnectUI) {
+        if (!window.LottoApp.tonConnectUI) {
+            try {
                 window.LottoApp.tonConnectUI = new TONLib.TonConnectUI({
                     manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                     buttonRootId: 'ton-connect-button'
                 });
-                console.log("✅ Billetera lista");
+                console.log("✅ Botón de Wallet generado");
+            } catch (e) {
+                console.error("❌ Error al crear el botón:", e);
             }
-        } catch (e) {
-            console.error("❌ Error en TON:", e);
         }
-    } else {
+    } else if (!TONLib) {
+        console.warn("⏳ Esperando librería externa...");
         setTimeout(inicializarBilletera, 1000);
     }
 }
 
-// Arrancar todo al cargar la página
+// Iniciar al cargar
 window.addEventListener('load', () => {
-    inicializarBilletera();
-    
-    // Mostrar nombre del usuario
-    const user = window.LottoApp.tg.initDataUnsafe.user;
-    if (user) {
-        const nameElement = document.getElementById('user-name');
-        if (nameElement) nameElement.innerText = user.first_name;
+    // Si la app arranca en la sección wallet, inicializar
+    if (document.getElementById('wallet-section').style.display !== 'none') {
+        inicializarBilletera();
     }
 });
