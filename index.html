@@ -10,34 +10,39 @@
 <body>
     <div id="app">
         <header>
-            <div class="user-info">
-                <span id="user-name">Cargando...</span>
-                <div class="balance-container">
-                    <span class="icon">🥬</span> 
-                    <span id="balance">0</span>
+            <div class="user-container">
+                <img id="user-photo" src="https://via.placeholder.com/42" alt="avatar" class="avatar">
+                <div class="user-info">
+                    <span id="user-name">Cargando...</span>
+                    <div class="balance-pill">
+                        <span class="icon">🥬</span>
+                        <span id="balance">0</span>
+                    </div>
                 </div>
             </div>
-            <button id="connect-wallet-btn" class="wallet-btn">
+            <button id="connect-wallet-btn" class="wallet-btn-styled">
                 Connect Wallet
             </button>
         </header>
 
         <main>
             <div id="lobby" class="section active">
-                <h1>🎰 Lobby</h1>
-                <p>¡Bienvenido a Animalito Lotto!</p>
+                <div class="hero-card">
+                    <h1>🎰 Lobby</h1>
+                    <p>¡Bienvenido a Animalito Lotto!</p>
+                </div>
             </div>
 
             <div id="tasks" class="section" style="display:none;">
                 <h1>📋 Tareas</h1>
-                <p>Completa misiones para ganar lechugas.</p>
+                <p>Completa misiones para ganar más lechugas.</p>
             </div>
 
             <div id="wallet" class="section" style="display:none;">
                 <h1>👛 Wallet</h1>
-                <p>Gestiona tus fondos.</p>
-                <div style="text-align: center; margin-top: 20px;">
-                    <button class="wallet-btn" onclick="alert('Funcionalidad de compra en desarrollo')">
+                <div class="buy-card">
+                    <p>Saldo: <span class="highlight">1000</span> Lechugas</p>
+                    <button class="buy-btn" onclick="alert('Función de compra activa')">
                         Comprar 1000 Lechugas
                     </button>
                 </div>
@@ -45,12 +50,12 @@
 
             <div id="referrals" class="section" style="display:none;">
                 <h1>👥 Amigos</h1>
-                <p>Invita y gana bonificaciones.</p>
+                <p>Invita a tus amigos y gana bonos.</p>
             </div>
         </main>
 
         <nav class="bottom-nav">
-            <button class="nav-item" onclick="showSection('lobby')">🏠 Lobby</button>
+            <button class="nav-item active" onclick="showSection('lobby')">🏠 Lobby</button>
             <button class="nav-item" onclick="showSection('tasks')">📋 Tareas</button>
             <button class="nav-item" onclick="showSection('wallet')">👛 Wallet</button>
             <button class="nav-item" onclick="showSection('referrals')">👥 Amigos</button>
