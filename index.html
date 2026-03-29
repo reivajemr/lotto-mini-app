@@ -2,26 +2,33 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Animalito Lotto</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
-    <script src="https://adsgram.ai/js/adsgram-sdk.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; overflow-x: hidden; }
         .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 100; }
-        .user-info { display: flex; flex-direction: column; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; z-index: 100; }
-        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; transition: 0.3s; }
+        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; }
         .section { padding: 20px; display: none; padding-bottom: 100px; min-height: 80vh; }
         .btn-action { width: 100%; padding: 15px; border-radius: 12px; border: none; font-weight: bold; margin-bottom: 15px; cursor: pointer; color: white; font-size: 16px; }
+        
+        /* Pantalla de carga interna rápida */
+        #loading-screen { position: fixed; inset: 0; background: #121212; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+        .spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4caf50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p>Iniciando Granja...</p>
+    </div>
+
     <div class="header">
-        <div class="user-info">
-            <span id="user-name" style="font-weight: bold;">Cargando...</span>
+        <div style="display: flex; flex-direction: column;">
+            <span id="user-name" style="font-weight: bold;">Usuario</span>
             <div style="font-size: 14px; margin-top: 5px;">
                 <span>🥬 <span id="user-coins">0</span></span>
                 <span style="margin-left: 10px;">💎 <span id="user-gems">0.00</span></span>
@@ -33,44 +40,30 @@
     <div id="home-section" class="section" style="display: block; text-align: center;">
         <h2 style="color: #ffcc00;">🎰 Lobby</h2>
         <div style="margin-top: 50px; font-size: 50px;">🎰</div>
-        <p>¡Pronto podrás jugar a los animalitos aquí!</p>
+        <p>¡Pronto podrás jugar aquí!</p>
     </div>
 
     <div id="tasks-section" class="section">
-        <h2 style="text-align: center;">📋 Tareas Diarias</h2>
-        <div style="background: #2a2a2a; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border: 1px solid #444;">
-            <div>
-                <p style="margin:0; font-weight:bold;">Ver Publicidad</p>
-                <small style="color: #4caf50;">Recompensa: +10 🥬</small>
-            </div>
+        <h2 style="text-align: center;">📋 Tareas</h2>
+        <div style="background: #2a2a2a; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #444;">
+            <div><p style="margin:0; font-weight:bold;">Anuncio</p><small style="color: #4caf50;">+10 🥬</small></div>
             <button onclick="verAnuncio()" style="background:#0088cc; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:bold;">VER</button>
         </div>
     </div>
 
     <div id="wallet-section" class="section" style="text-align: center;">
-        <h2 style="color: #4caf50;">💰 Mi Billetera</h2>
-        <div style="background: #2a2a2a; padding: 25px; border-radius: 20px; margin-bottom: 25px; border: 1px solid #333;">
-            <p style="margin: 0; color: #aaa; font-size: 14px;">Saldo Actual</p>
-            <h1 style="margin: 10px 0; font-size: 40px;"><span id="wallet-coins-display">0</span> 🥬</h1>
+        <h2 style="color: #4caf50;">💰 Wallet</h2>
+        <div style="background: #2a2a2a; padding: 25px; border-radius: 20px; margin-bottom: 25px;">
+            <p style="margin:0; color:#aaa;">Tu Saldo</p>
+            <h1 style="margin:10px 0;"><span id="wallet-coins-display">0</span> 🥬</h1>
         </div>
-        
-        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">
-            📥 Comprar 1,000 🥬 (0.1 TON)
-        </button>
-        
-        <button onclick="solicitarRetiro()" class="btn-action" style="background: #333; border: 1px solid #555;">
-            📤 Retirar (Mín. 50,000 🥬)
-        </button>
-        
-        <p style="font-size: 11px; color: #777; line-height: 1.4;">
-            * Los retiros son procesados manualmente por seguridad.<br>
-            Asegúrate de estar en <b>TON Testnet</b>.
-        </p>
+        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">📥 Comprar 1,000 🥬</button>
+        <button onclick="solicitarRetiro()" class="btn-action" style="background: #333;">📤 Retirar</button>
     </div>
 
     <div id="referrals-section" class="section" style="text-align: center;">
         <h2>👥 Amigos</h2>
-        <p>¡Invita a tus panas y gana lechugas!</p>
+        <p>¡Próximamente sistema de referidos!</p>
     </div>
 
     <div class="nav-bar">
@@ -80,6 +73,8 @@
         <button onclick="showSection('referrals')">👥<br>Amigos</button>
     </div>
 
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js" defer></script>
+    <script src="https://adsgram.ai/js/adsgram-sdk.js" defer></script>
     <script src="app.js"></script>
 </body>
 </html>
