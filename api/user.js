@@ -1,39 +1,32 @@
-// api/user.js
 import { MongoClient } from 'mongodb';
 
-let cachedDb = null;
-
-async function connectToDatabase() {
-  if (cachedDb) return cachedDb;
-  const client = await MongoClient.connect(process.env.MONGODB_URI);
-  const db = client.db('animalito_db');
-  cachedDb = db;
-  return db;
-}
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri);
 
 export default async function handler(req, res) {
-  try {
-    const db = await connectToDatabase();
-    const { telegramId, username, reward } = req.body;
+    if (req.method !== 'POST') return res.status(405).send('Solo POST');
 
-    if (reward) {
-      // USAR $inc ES VITAL: Esto suma las lechugas, no las sobrescribe
-      await db.collection('users').updateOne(
-        { telegramId: telegramId },
-        { $inc: { coins: reward } }, 
-        { upsert: true }
-      );
-    } else {
-      // Crear o buscar usuario al iniciar
-      const user = await db.collection('users').findOne({ telegramId: telegramId });
-      if (!user) {
-        await db.collection('users').insertOne({ telegramId, username, coins: 0 });
-        return res.status(200).json({ coins: 0 });
-      }
-      return res.status(200).json(user);
+    try {
+        await client.connect();
+        const db = client.db('animalito_db'); // Asegúrate que este sea el nombre de tu DB
+        const collection = db.collection('users');
+        const { telegramId, username, reward } = req.body;
+
+        if (reward) {
+            // Esto suma las lechugas al saldo que ya existe
+            await collection.updateOne(
+                { telegramId: telegramId },
+                { $inc: { coins: reward }, $set: { username: username } },
+                { upsert: true }
+            );
+            return res.status(200).json({ success: true });
+        } else {
+            // Esto es para cuando el usuario abre la app
+            const user = await collection.findOne({ telegramId: telegramId });
+            return res.status(200).json(user || { coins: 0 });
+        }
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "Fallo de conexión con MongoDB" });
     }
-    res.status(200).json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Error de servidor" });
-  }
 }
