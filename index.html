@@ -1,99 +1,74 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animalito Lotto</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+    <script src="https://adsgram.ai/js/adsgram-sdk.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; margin: 0; padding: 0; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; }
+        .user-info { display: flex; flex-direction: column; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333; }
+        .nav-bar button { background: none; border: none; color: white; font-size: 10px; cursor: pointer; }
+        .section { padding: 20px; display: none; padding-bottom: 80px; }
+        .btn-action { width: 100%; padding: 15px; border-radius: 10px; border: none; font-weight: bold; margin-bottom: 10px; cursor: pointer; color: white; }
+    </style>
 </head>
 <body>
-    <div id="app">
-<header style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #1a1a1a; border-bottom: 1px solid #333; min-height: 80px;">
-    
-    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 120px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <img src="icon.png" id="user-avatar" style="width: 35px; height: 35px; border-radius: 50%; border: 1px solid #0088cc;">
-            <span id="user-name" style="font-size: 12px; font-weight: bold; color: white;">Cargando...</span>
-        </div>
-        
-        <div style="display: flex; gap: 5px;">
-            <div style="background: #2a2a2a; padding: 2px 6px; border-radius: 8px; display: flex; align-items: center; gap: 3px;">
-                <span style="font-size: 10px;">🥬</span>
-                <span id="user-coins" style="font-size: 11px; color: #ffcc00;">0</span>
-            </div>
-            <div style="background: #2a2a2a; padding: 2px 6px; border-radius: 8px; display: flex; align-items: center; gap: 3px;">
-                <span style="font-size: 10px;">💎</span>
-                <span id="user-gems" style="font-size: 11px; color: #00ccff;">0.00</span>
-            </div>
-        </div>
-    </div>
 
-    <div style="flex-shrink: 0;">
+    <div class="header">
+        <div class="user-info">
+            <span id="user-name" style="font-weight: bold;">Cargando...</span>
+            <div style="font-size: 14px; margin-top: 5px;">
+                <span>🥬 <span id="user-coins">0</span></span>
+                <span style="margin-left: 10px;">💎 <span id="user-gems">0.00</span></span>
+            </div>
+        </div>
         <div id="ton-connect"></div>
     </div>
 
-</header>
+    <div id="home-section" class="section" style="display: block; text-align: center;">
+        <h2>🎰 Lobby</h2>
+        <p>¡Bienvenido al juego de los Animalitos!</p>
+        </div>
 
-        <main id="main-content">
-<section id="home-section">
-    <h2 style="text-align: center;">🎰 Lobby</h2>
-   
-</section>
-            <section id="tasks-section" style="display: none;">
-                <h2>📺 Gana Lechugas Gratis</h2>
-                    <p>Mira anuncios y completa misiones para recargar tu saldo.</p>
-    
-                    <div class="task-card">
-                        <div class="task-info">
-                            <span>Ver Anuncio de Video</span>
-                            <small>+10 🥬</small>
-                        </div>
-                        <button class="btn-task" onclick="mostrarAnuncio()">VER</button>
-                    </div>
-            
-                    <div class="task-card">
-                        <div class="task-info">
-                            <span>Unirse al Canal Oficial</span>
-                            <small>+50 🥬</small>
-                        </div>
-                        <button class="btn-task" onclick="window.open('https://t.me/TuCanal', '_blank')">UNIRSE</button>
-                    </div>
-            </section>
-
-<section id="wallet-section" style="display: none;">
-    <div style="padding: 20px; text-align: center;">
-        <h2 style="margin-bottom: 20px;">💰 Mi Billetera</h2>
-        
-        <div id="ton-connect-button" style="display: flex; justify-content: center; align-items: center; min-height: 48px; width: 100%; margin: 0 auto;"></div>
-        
-    </div>
-</section>
-
-            
-        </main>
-
-<nav style="position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333;">
-<div style="position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333;">
-    
-    <button onclick="showSection('home')" style="background:none; border:none; color:white; font-size:10px;">
-        🏠<br>Lobby
-    </button>
-
-    <button onclick="showSection('tasks')" style="background:none; border:none; color:white; font-size:10px;">
-        📋<br>Tareas
-    </button>
-
-    <button onclick="showSection('wallet')" style="background:none; border:none; color:white; font-size:10px;">
-        💰<br>Wallet
-    </button>
-
-    <button onclick="showSection('referrals')" style="background:none; border:none; color:white; font-size:10px;">
-        👥<br>Amigos
-    </button>
-
-</div>
-</nav>
+    <div id="tasks-section" class="section">
+        <h2 style="text-align: center;">📋 Tareas Diarias</h2>
+        <div style="background: #2a2a2a; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div>
+                <p style="margin:0; font-weight:bold;">Ver Publicidad</p>
+                <small style="color: #4caf50;">Recompensa: +10 🥬</small>
+            </div>
+            <button onclick="verAnuncio()" style="background:#0088cc; color:white; border:none; padding:8px 15px; border-radius:8px;">Ver</button>
+        </div>
     </div>
 
-    <script src="app.js?v=1.1"></script>
+    <div id="wallet-section" class="section" style="text-align: center;">
+        <h2>💰 Mi Billetera</h2>
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 15px; margin-bottom: 20px;">
+            <p style="margin: 0; color: #aaa;">Saldo Actual</p>
+            <h1 style="margin: 10px 0;"><span id="wallet-coins-display">0</span> 🥬</h1>
+        </div>
+        <button onclick="comprarLechugas()" class="btn-action" style="background: #4caf50;">📥 Comprar 1,000 🥬 (0.1 TON)</button>
+        <button onclick="solicitarRetiro()" class="btn-action" style="background: #444;">📤 Retirar (Mín. 50,000 🥬)</button>
+        <p style="font-size: 11px; color: #777;">* Retiros manuales para tu seguridad.</p>
+    </div>
+
+    <div id="referrals-section" class="section" style="text-align: center;">
+        <h2>👥 Amigos</h2>
+        <p>Invita a tus amigos y gana comisiones.</p>
+    </div>
+
+    <div class="nav-bar">
+        <button onclick="showSection('home')">🏠<br>Lobby</button>
+        <button onclick="showSection('tasks')">📋<br>Tareas</button>
+        <button onclick="showSection('wallet')">💰<br>Wallet</button>
+        <button onclick="showSection('referrals')">👥<br>Amigos</button>
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>
