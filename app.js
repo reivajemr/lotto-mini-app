@@ -1,44 +1,42 @@
-// Usamos el objeto global para evitar errores de redifinicón
 window.LottoApp = window.LottoApp || {};
 window.LottoApp.tg = window.Telegram.WebApp;
 window.LottoApp.tg.expand();
 
-// Navegación corregida
 window.showSection = function(sectionId) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(id => {
+    // 1. Ocultar todas las secciones primero
+    ['home', 'tasks', 'wallet', 'referrals'].forEach(id => {
         const el = document.getElementById(id + '-section');
-        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
+        if (el) el.style.display = 'none';
     });
 
-    // Forzar la creación del botón específicamente cuando se abre la wallet
+    // 2. Mostrar la sección seleccionada
+    const activeSection = document.getElementById(sectionId + '-section');
+    if (activeSection) activeSection.style.display = 'block';
+
+    // 3. Si entramos a la billetera, dibujamos el botón DESPUÉS de mostrarla
     if (sectionId === 'wallet') {
-        renderizarBotonTON();
+        setTimeout(dibujarBotonTon, 100); // 100ms de gracia para que el DOM respire
     }
 };
 
-function renderizarBotonTON() {
-    const TonLib = window.TONConnectUI;
-    const container = document.getElementById('ton-connect-button');
-    
-    if (container && TonLib && TonLib.TonConnectUI) {
-        // Solo creamos la instancia si no existe ya
-        if (!window.LottoApp.ui) {
-            try {
-                window.LottoApp.ui = new TonLib.TonConnectUI({
-                    manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-                    buttonRootId: 'ton-connect-button'
-                });
-                console.log("✅ Interfaz de Wallet cargada.");
-            } catch (e) {
-                console.error("❌ Error inicializando TON:", e);
-            }
+function dibujarBotonTon() {
+    // Evitar duplicados si ya se dibujó antes
+    if (window.LottoApp.billeteraActiva) return;
+
+    const TonUI = window.TONConnectUI;
+    if (TonUI && TonUI.TonConnectUI) {
+        try {
+            window.LottoApp.billeteraActiva = new TonUI.TonConnectUI({
+                // Asegúrate de que este archivo exista en tu GitHub
+                manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
+                buttonRootId: 'ton-connect-button'
+            });
+            console.log("✅ Botón dibujado exitosamente en pantalla visible");
+        } catch (error) {
+            console.error("❌ Error al dibujar:", error);
         }
     } else {
-        // Si la librería externa aún no baja, reintenta brevemente
-        setTimeout(renderizarBotonTON, 500);
+        // Reintentar si el internet está lento
+        setTimeout(dibujarBotonTon, 500);
     }
 }
-
-// Inicializar al cargar la página
-window.onload = renderizarBotonTON;
