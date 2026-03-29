@@ -1,11 +1,36 @@
-<div class="section-container">
-    <div class="wallet-status">
-        <span class="emoji-icon">👛</span>
-        <h2>Mi Billetera</h2>
-        <p>Gestiona tus retiros y depósitos.</p>
+<div class="wallet-container">
+    <div class="tab-selector">
+        <button class="tab-btn active" onclick="switchWalletTab('deposit')">Depositar</button>
+        <button class="tab-btn" onclick="switchWalletTab('withdraw')">Retirar</button>
     </div>
-    
-    <button id="connect-wallet-btn-inner" class="wallet-btn-styled">
-        Connect Wallet
-    </button>
+
+    <div id="deposit-content" class="wallet-tab-content">
+        <div class="wallet-card">
+            <h3>📥 Comprar Lechugas</h3>
+            <p>Saldo actual: <span class="highlight">1000 🥬</span></p>
+            
+            <div class="pack-list">
+                <button class="pack-item" onclick="initPurchase(100)">100 🥬 por 1 TON</button>
+                <button class="pack-item" onclick="initPurchase(500)">550 🥬 por 5 TON</button>
+                <button class="pack-item" onclick="initPurchase(1000)">1200 🥬 por 10 TON</button>
+            </div>
+        </div>
+        <button id="connect-wallet-btn-inner" class="wallet-btn-styled">
+            Connect Wallet
+        </button>
+    </div>
+
+    <div id="withdraw-content" class="wallet-tab-content" style="display:none;">
+        <div class="wallet-card">
+            <h3>📤 Retirar Ganancias</h3>
+            <p>Mínimo de retiro: 2000 🥬</p>
+            
+            <div class="input-group">
+                <label>Monto a retirar:</label>
+                <input type="number" id="withdraw-amount" placeholder="0.00">
+            </div>
+            
+            <button class="action-btn-red" onclick="requestWithdraw()">Confirmar Retiro</button>
+        </div>
+    </div>
 </div>
