@@ -1,42 +1,24 @@
-window.LottoApp = window.LottoApp || {};
-window.LottoApp.tg = window.Telegram.WebApp;
-window.LottoApp.tg.expand();
+// Asegurar que Telegram inicie
+window.Telegram.WebApp.expand();
 
-window.showSection = function(sectionId) {
-    // 1. Ocultar todas las secciones primero
-    ['home', 'tasks', 'wallet', 'referrals'].forEach(id => {
-        const el = document.getElementById(id + '-section');
-        if (el) el.style.display = 'none';
+// Inyección directa sin retrasos
+window.addEventListener('DOMContentLoaded', () => {
+    try {
+        const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+            manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
+            buttonRootId: 'ton-connect'
+        });
+        console.log("🚀 Billetera inyectada en el DOM");
+    } catch (e) {
+        console.error("❌ Fallo al inyectar TON:", e);
+    }
+});
+
+// Mantén tu función de navegación igual
+window.showSection = function(id) {
+    const sections = ['home', 'tasks', 'wallet', 'referrals'];
+    sections.forEach(s => {
+        const el = document.getElementById(s + '-section');
+        if (el) el.style.display = (s === id) ? 'block' : 'none';
     });
-
-    // 2. Mostrar la sección seleccionada
-    const activeSection = document.getElementById(sectionId + '-section');
-    if (activeSection) activeSection.style.display = 'block';
-
-    // 3. Si entramos a la billetera, dibujamos el botón DESPUÉS de mostrarla
-    if (sectionId === 'wallet') {
-        setTimeout(dibujarBotonTon, 100); // 100ms de gracia para que el DOM respire
-    }
 };
-
-function dibujarBotonTon() {
-    // Evitar duplicados si ya se dibujó antes
-    if (window.LottoApp.billeteraActiva) return;
-
-    const TonUI = window.TONConnectUI;
-    if (TonUI && TonUI.TonConnectUI) {
-        try {
-            window.LottoApp.billeteraActiva = new TonUI.TonConnectUI({
-                // Asegúrate de que este archivo exista en tu GitHub
-                manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-                buttonRootId: 'ton-connect-button'
-            });
-            console.log("✅ Botón dibujado exitosamente en pantalla visible");
-        } catch (error) {
-            console.error("❌ Error al dibujar:", error);
-        }
-    } else {
-        // Reintentar si el internet está lento
-        setTimeout(dibujarBotonTon, 500);
-    }
-}
