@@ -8,14 +8,14 @@ tg.expand(); // Abre la app a pantalla completa al iniciar
 let tonConnectUI;
 
 try {
-    // Usamos window.TONConnectUI para asegurarnos de que lo busque en la librería cargada
+    // Usamos window.TONConnectUI para que sea global y seguro
     tonConnectUI = new TONConnectUI.TonConnectUI({
         manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
         buttonRootId: 'ton-connect-button'
     });
     console.log("✅ TON Connect inicializado correctamente");
 } catch (e) {
-    console.error("❌ Error al cargar TON Connect. Verifica que el script esté en el HTML:", e);
+    console.error("❌ Error al cargar TON Connect:", e);
 }
 
 // 4. LÓGICA DE NAVEGACIÓN ENTRE SECCIONES
