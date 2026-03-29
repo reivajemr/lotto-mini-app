@@ -57,7 +57,7 @@ function connectWallet() {
     btn.innerText = "Conectando...";
     btn.disabled = true;
 
-    // Simulación de conexión (Próximo paso: TonConnect)
+    // Simulación de conexión exitosa
     setTimeout(() => {
         btn.innerText = "Wallet: 0x...1234 ✅";
         btn.style.background = "linear-gradient(135deg, #28a745, #218838)";
@@ -77,14 +77,21 @@ async function cargarDatosUsuario() {
     // Mostrar nombre en el Header
     document.getElementById('user-name').innerText = user.first_name || "Usuario";
     
-    // Intentar cargar la foto de perfil
+    // Manejo de avatar e iniciales para evitar errores 404
+    const photoEl = document.getElementById('user-photo');
+    const initialsEl = document.getElementById('user-initials');
+
     if (user.photo_url) {
-        const photoEl = document.getElementById('user-photo');
-        if (photoEl) photoEl.src = user.photo_url;
+        photoEl.src = user.photo_url;
+        photoEl.style.display = 'block';
+        if (initialsEl) initialsEl.style.display = 'none';
+    } else if (initialsEl) {
+        initialsEl.innerText = (user.first_name || "U").charAt(0).toUpperCase();
+        photoEl.style.display = 'none';
     }
 
     try {
-        // Petición a tu API protegida en Vercel
+        // Petición a tu API en Vercel
         const response = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
