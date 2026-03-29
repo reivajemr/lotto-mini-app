@@ -1,31 +1,19 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
-
 let tonConnectUI;
 
-// 1. NAVEGACIÓN INSTANTÁNEA
 window.showSection = function(id) {
-    const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(s => {
-        const el = document.getElementById(s + '-section');
-        if (el) el.style.display = (s === id) ? 'block' : 'none';
-    });
-    if (id === 'wallet') {
-        document.getElementById('wallet-coins-display').innerText = document.getElementById('user-coins').innerText;
-    }
+    document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+    document.getElementById(id + '-section').style.display = 'block';
+    if (id === 'wallet') document.getElementById('wallet-coins-display').innerText = document.getElementById('user-coins').innerText;
 };
 
-// 2. CARGA ASÍNCRONA (No bloquea la pantalla)
 window.onload = function() {
-    // Quitamos la pantalla de carga de inmediato
-    const loader = document.getElementById('loading-screen');
-    if (loader) loader.style.display = 'none';
-
+    document.getElementById('loading-screen').style.display = 'none';
     const user = tg.initDataUnsafe.user;
     if (user) {
         document.getElementById('user-name').innerText = user.first_name;
         
-        // Llamada a DB sin esperar por ella para mostrar la app
         fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -33,17 +21,13 @@ window.onload = function() {
         })
         .then(res => res.json())
         .then(data => {
+            // Evitamos el 'undefined' que viste en el celular
             const coins = data.coins ?? 0;
             document.getElementById('user-coins').innerText = coins;
-            document.getElementById('user-gems').innerText = (data.gems ?? 0).toFixed(2);
         })
-        .catch(() => {
-            console.log("Error de red: Usando valores locales");
-            document.getElementById('user-coins').innerText = "0";
-        });
+        .catch(() => console.log("Servidor lento, usando datos locales."));
     }
 
-    // Inicializar billetera con retardo para asegurar que el script cargó
     setTimeout(() => {
         if (window.TON_CONNECT_UI) {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -52,32 +36,7 @@ window.onload = function() {
                 network: 'testnet' 
             });
         }
-    }, 800);
-};
-
-// --- RESTO DE FUNCIONES (Comprar, Retirar, Sumar) ---
-function sumarLechugasDB(cantidad) {
-    const user = tg.initDataUnsafe.user;
-    const current = parseInt(document.getElementById('user-coins').innerText) || 0;
-    const total = current + cantidad;
-    
-    document.getElementById('user-coins').innerText = total;
-    if(document.getElementById('wallet-coins-display')) document.getElementById('wallet-coins-display').innerText = total;
-
-    fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId: user.id, reward: cantidad })
-    });
-}
-
-window.verAnuncio = function() {
-    if(!window.Adsgram) return tg.showAlert("Cargando sistema de anuncios... intenta en 3 segundos.");
-    const AdController = window.Adsgram.init({ blockId: "27" });
-    AdController.show().then(() => {
-        sumarLechugasDB(10);
-        tg.showAlert("¡+10 🥬!");
-    }).catch(() => tg.showAlert("Anuncio no completado."));
+    }, 1000);
 };
 
 window.comprarLechugas = async function() {
@@ -87,12 +46,20 @@ window.comprarLechugas = async function() {
     };
     try {
         const result = await tonConnectUI.sendTransaction(tx);
-        if (result) sumarLechugasDB(1000);
-    } catch (e) { tg.showAlert("Pago cancelado."); }
-};
-
-window.solicitarRetiro = function() {
-    const balance = parseInt(document.getElementById('user-coins').innerText) || 0;
-    if (balance < 50000) return tg.showAlert("Mínimo 50,000 🥬");
-    // Lógica de fetch a /api/withdraw-request aquí igual que antes...
+        if (result) {
+            // ACTUALIZACIÓN INMEDIATA: No esperamos a la DB
+            let current = parseInt(document.getElementById('user-coins').innerText) || 0;
+            let total = current + 1000;
+            document.getElementById('user-coins').innerText = total;
+            document.getElementById('wallet-coins-display').innerText = total;
+            
+            // Intentamos guardar en DB en segundo plano
+            fetch('/api/user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: tg.initDataUnsafe.user.id, reward: 1000 })
+            });
+            tg.showAlert("✅ ¡1,000 lechugas sumadas!");
+        }
+    } catch (e) { tg.showAlert("Transacción fallida."); }
 };
