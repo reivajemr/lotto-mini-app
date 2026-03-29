@@ -1,48 +1,40 @@
+// Usamos el objeto global window para evitar errores de redifinicón
 window.LottoApp = window.LottoApp || {};
 window.LottoApp.tg = window.Telegram.WebApp;
 window.LottoApp.tg.expand();
 
-// Navegación corregida
-window.showSection = function(sectionId) {
+// Función de navegación
+window.showSection = function(id) {
     const sections = ['home', 'tasks', 'wallet', 'referrals'];
-    sections.forEach(id => {
-        const el = document.getElementById(id + '-section');
-        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
+    sections.forEach(s => {
+        const el = document.getElementById(s + '-section');
+        if (el) el.style.display = (s === id) ? 'block' : 'none';
     });
-
-    // Si entramos a la wallet, forzamos la creación del botón si no existe
-    if (sectionId === 'wallet') {
-        inicializarBilletera();
-    }
+    // Intentar cargar la billetera si entramos a esa sección
+    if (id === 'wallet') inicializarBilletera();
 };
 
 function inicializarBilletera() {
-    const TONLib = window.TONConnectUI;
-    const buttonContainer = document.getElementById('ton-connect-button');
-    
-    // Solo intentamos si el contenedor existe y la librería cargó
-    if (buttonContainer && TONLib && TONLib.TonConnectUI) {
-        if (!window.LottoApp.tonConnectUI) {
+    // Verificamos si la clase existe en el objeto global 'window'
+    const TonUI = window.TONConnectUI;
+
+    if (TonUI && TonUI.TonConnectUI) {
+        if (!window.LottoApp.tonInstance) {
             try {
-                window.LottoApp.tonConnectUI = new TONLib.TonConnectUI({
+                window.LottoApp.tonInstance = new TonUI.TonConnectUI({
                     manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                     buttonRootId: 'ton-connect-button'
                 });
-                console.log("✅ Botón de Wallet generado");
+                console.log("✅ Billetera renderizada con éxito");
             } catch (e) {
-                console.error("❌ Error al crear el botón:", e);
+                console.error("❌ Error al crear instancia TON:", e);
             }
         }
-    } else if (!TONLib) {
-        console.warn("⏳ Esperando librería externa...");
-        setTimeout(inicializarBilletera, 1000);
+    } else {
+        // Si no está, esperamos medio segundo y reintentamos automáticamente
+        setTimeout(inicializarBilletera, 500);
     }
 }
 
-// Iniciar al cargar
-window.addEventListener('load', () => {
-    // Si la app arranca en la sección wallet, inicializar
-    if (document.getElementById('wallet-section').style.display !== 'none') {
-        inicializarBilletera();
-    }
-});
+// Iniciar proceso al cargar la página
+window.onload = inicializarBilletera;
