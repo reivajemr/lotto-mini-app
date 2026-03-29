@@ -68,12 +68,12 @@
             
         </main>
 
-        <nav class="bottom-nav">
-            <button onclick="showSection('home')">🏠 Lobby</button>
-            <button onclick="showSection('tasks')">📺 Tareas</button>
-            <button onclick="showSection('wallet')">💰 Wallet</button>
-            <button onclick="showSection('referrals')">👥 Amigos</button>
-        </nav>
+<nav style="position: fixed; bottom: 0; width: 100%; display: flex; justify-content: space-around; background: #1a1a1a; padding: 10px 0; border-top: 1px solid #333;">
+    <button onclick="window.showSection('home')" style="background:none; border:none; color:white; font-size:10px;">🏠<br>Lobby</button>
+    <button onclick="window.showSection('tasks')" style="background:none; border:none; color:white; font-size:10px;">📋<br>Tareas</button>
+    <button onclick="window.showSection('wallet')" style="background:none; border:none; color:white; font-size:10px;">💰<br>Wallet</button>
+    <button onclick="window.showSection('referrals')" style="background:none; border:none; color:white; font-size:10px;">👥<br>Amigos</button>
+</nav>
     </div>
 
     <script src="app.js?v=1.1"></script>
