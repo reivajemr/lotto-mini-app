@@ -20,45 +20,18 @@
                     </div>
                 </div>
             </div>
-            <button id="connect-wallet-btn" class="wallet-btn-styled">
-                Connect Wallet
-            </button>
+            <button id="connect-wallet-btn" class="wallet-btn-styled">Connect Wallet</button>
         </header>
 
-        <main>
-            <div id="lobby" class="section active">
-                <div class="hero-card">
-                    <h1>🎰 Lobby</h1>
-                    <p>¡Bienvenido a Animalito Lotto!</p>
-                </div>
-            </div>
-
-            <div id="tasks" class="section" style="display:none;">
-                <h1>📋 Tareas</h1>
-                <p>Completa misiones para ganar más lechugas.</p>
-            </div>
-
-            <div id="wallet" class="section" style="display:none;">
-                <h1>👛 Wallet</h1>
-                <div class="buy-card">
-                    <p>Saldo: <span class="highlight">1000</span> Lechugas</p>
-                    <button class="buy-btn" onclick="alert('Función de compra activa')">
-                        Comprar 1000 Lechugas
-                    </button>
-                </div>
-            </div>
-
-            <div id="referrals" class="section" style="display:none;">
-                <h1>👥 Amigos</h1>
-                <p>Invita a tus amigos y gana bonos.</p>
-            </div>
+        <main id="main-content">
+            <div class="loader">Cargando sección...</div>
         </main>
 
         <nav class="bottom-nav">
-            <button class="nav-item active" onclick="showSection('lobby')">🏠 Lobby</button>
-            <button class="nav-item" onclick="showSection('tasks')">📋 Tareas</button>
+            <button class="nav-item" onclick="showSection('lobby')">🏠 Lobby</button>
+            <button class="nav-item" onclick="showSection('tareas')">📋 Tareas</button>
             <button class="nav-item" onclick="showSection('wallet')">👛 Wallet</button>
-            <button class="nav-item" onclick="showSection('referrals')">👥 Amigos</button>
+            <button class="nav-item" onclick="showSection('amigos')">👥 Amigos</button>
         </nav>
     </div>
     <script src="app.js"></script>
