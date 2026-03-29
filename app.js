@@ -1,12 +1,23 @@
-// Usamos el objeto global para evitar el error "already declared" que viste en consola
+// Usamos el objeto global para evitar conflictos
 window.LottoApp = window.LottoApp || {};
 window.LottoApp.tg = window.Telegram.WebApp;
 window.LottoApp.tg.expand();
 
-function inicializarBilletera() {
-    // Buscamos la librería directamente en el objeto window
-    const TONLib = window.TONConnectUI;
+// --- FUNCIÓN DE NAVEGACIÓN (Arregla el error "not defined") ---
+window.showSection = function(sectionId) {
+    console.log("Cambiando a sección:", sectionId);
+    const sections = ['home', 'tasks', 'wallet', 'referrals'];
+    sections.forEach(id => {
+        const el = document.getElementById(id + '-section');
+        if (el) {
+            el.style.display = (id === sectionId) ? 'block' : 'none';
+        }
+    });
+};
 
+// --- INICIALIZACIÓN DE BILLETERA ---
+function inicializarBilletera() {
+    const TONLib = window.TONConnectUI;
     if (TONLib && TONLib.TonConnectUI) {
         try {
             if (!window.LottoApp.tonConnectUI) {
@@ -14,20 +25,24 @@ function inicializarBilletera() {
                     manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                     buttonRootId: 'ton-connect-button'
                 });
-                console.log("✅ Billetera conectada exitosamente");
+                console.log("✅ Billetera lista");
             }
         } catch (e) {
-            console.error("❌ Error al configurar el botón:", e);
+            console.error("❌ Error en TON:", e);
         }
     } else {
-        // Si no está, esperamos y reintentamos
         setTimeout(inicializarBilletera, 1000);
     }
 }
 
-// Iniciar cuando el documento esté listo
-if (document.readyState === 'complete') {
+// Arrancar todo al cargar la página
+window.addEventListener('load', () => {
     inicializarBilletera();
-} else {
-    window.addEventListener('load', inicializarBilletera);
-}
+    
+    // Mostrar nombre del usuario
+    const user = window.LottoApp.tg.initDataUnsafe.user;
+    if (user) {
+        const nameElement = document.getElementById('user-name');
+        if (nameElement) nameElement.innerText = user.first_name;
+    }
+});
