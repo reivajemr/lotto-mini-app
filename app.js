@@ -1,24 +1,29 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// 1. FUNCIÓN PARA CAMBIAR SECCIONES (Hace que los botones inferiores funcionen)
+// FUNCIÓN PARA DAR VIDA A LOS BOTONES
 function showSection(sectionId) {
-    console.log("Cambiando a:", sectionId);
+    console.log("Cambiando a sección:", sectionId);
     
-    // Oculta todas las secciones
+    // 1. Ocultar todas las secciones
     const sections = document.querySelectorAll('.section');
-    sections.forEach(s => s.style.display = 'none');
+    sections.forEach(s => {
+        s.style.display = 'none';
+        s.classList.remove('active');
+    });
 
-    // Muestra la sección que tocaste
+    // 2. Mostrar la sección solicitada
     const target = document.getElementById(sectionId);
     if (target) {
         target.style.display = 'block';
+        target.classList.add('active');
     } else {
-        console.error("No se encontró la sección:", sectionId);
+        // Esto corregirá el error rojo que veías en consola
+        console.error("Error: La sección '" + sectionId + "' no existe en el HTML");
     }
 }
 
-// 2. CARGAR DATOS (Lo que ya funciona, pero mejorado)
+// CARGAR LOS 1000 DESDE MONGODB
 async function cargarDatos() {
     const user = tg.initDataUnsafe.user;
     if (!user) return;
@@ -29,33 +34,34 @@ async function cargarDatos() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ telegramId: user.id.toString() })
         });
-
+        
         const data = await response.json();
+        console.log("Datos recibidos de la base de datos:", data);
 
-        // Actualizar Saldo
+        // Actualizar interfaz con los 1000 del servidor
         const balanceEl = document.getElementById('balance');
-        if (balanceEl) balanceEl.innerText = data.coins || 0;
+        if (balanceEl && data.coins !== undefined) {
+            balanceEl.innerText = data.coins;
+        }
 
-        // Actualizar Nombre
         const nameEl = document.getElementById('user-name');
-        if (nameEl) nameEl.innerText = user.first_name;
-
+        if (nameEl) {
+            nameEl.innerText = user.first_name || "Usuario";
+        }
     } catch (e) {
-        console.error("Error cargando datos:", e);
+        console.error("Error de conexión con la API:", e);
     }
 }
 
-// 3. ASEGURAR QUE LOS BOTONES TENGAN VIDA
+// INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
-    // Forzar que el botón azul de Wallet aparezca
-    const walletBtn = document.getElementById('connect-wallet-btn') || document.querySelector('.wallet-btn');
-    if (walletBtn) {
-        walletBtn.style.display = 'flex'; 
-    }
+    // Forzamos visibilidad inicial
+    const walletBtn = document.getElementById('connect-wallet-btn');
+    if (walletBtn) walletBtn.style.display = 'flex';
 
-    // Cargar los 1000 de saldo
+    // Cargamos tus lechugas
     cargarDatos();
     
-    // Mostrar el Lobby por defecto al abrir
+    // Aseguramos que empiece en el Lobby
     showSection('lobby');
 });
