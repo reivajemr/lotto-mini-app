@@ -1,39 +1,44 @@
+// Usamos un solo objeto para evitar errores de "already declared"
 window.LottoApp = {
     tg: window.Telegram.WebApp,
-    ton: null
+    tonConnectUI: null
 };
 
 window.LottoApp.tg.expand();
 
-function iniciarConexion() {
-    // Intentamos cargar de una vez porque el archivo es local
+function inicializarBilletera() {
     if (typeof TONConnectUI !== 'undefined') {
         try {
-            window.LottoApp.ton = new TONConnectUI.TonConnectUI({
+            window.LottoApp.tonConnectUI = new TONConnectUI.TonConnectUI({
                 manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                 buttonRootId: 'ton-connect-button'
             });
-            console.log("✅ ¡Billetera local vinculada!");
-        } catch (e) {
-            console.error("❌ Error de configuración:", e);
+            console.log("✅ Billetera configurada correctamente");
+        } catch (error) {
+            console.error("❌ Error al inicializar TON Connect:", error);
         }
     } else {
-        console.error("❌ El archivo tonconnect-ui.min.js no se cargó correctamente desde tu servidor.");
+        console.log("⏳ Reintentando carga de librería...");
+        setTimeout(inicializarBilletera, 500);
     }
 }
 
+// Iniciar cuando cargue la página
 window.addEventListener('load', () => {
-    iniciarConexion();
+    inicializarBilletera();
+    
+    // Cargar nombre de usuario
     const user = window.LottoApp.tg.initDataUnsafe.user;
     if (user) {
         document.getElementById('user-name').innerText = user.first_name;
     }
 });
 
-function showSection(id) {
-    const secciones = ['home', 'tasks', 'wallet', 'referrals'];
-    secciones.forEach(s => {
-        const div = document.getElementById(s + '-section');
-        if (div) div.style.display = (s === id) ? 'block' : 'none';
+// Función para cambiar de sección
+function showSection(sectionId) {
+    const sections = ['home', 'tasks', 'wallet', 'referrals'];
+    sections.forEach(id => {
+        const el = document.getElementById(id + '-section');
+        if (el) el.style.display = (id === sectionId) ? 'block' : 'none';
     });
 }
