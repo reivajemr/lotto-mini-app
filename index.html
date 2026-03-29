@@ -11,7 +11,11 @@
     <div id="app">
 <header>
     <div class="user-container">
-        <img id="user-photo" src="https://via.placeholder.com/42" alt="avatar" class="avatar">
+        <div id="user-avatar-container" class="avatar-placeholder">
+            <img id="user-photo" src="" alt="" style="display:none;">
+            <span id="user-initials">--</span>
+        </div>
+        
         <div class="user-info">
             <span id="user-name">Cargando...</span>
             <div class="balance-pill">
@@ -20,7 +24,7 @@
             </div>
         </div>
     </div>
-    </header>
+</header>
 
         <main id="main-content">
             <div class="loader">Cargando sección...</div>
