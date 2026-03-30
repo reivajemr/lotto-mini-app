@@ -570,8 +570,8 @@ async function settleDrawBets(bets, tickets, users, drawId, winnerNumber, winner
 // HELPERS TELEGRAM
 // ════════════════════════════════════════════════════════════
 async function notify(text, markdown = false) {
-  const token  = process.env.TOKEN_BOT;
-  const chatId = process.env.ID_DE_CHAT;
+  const token  = process.env.BOT_TOKEN;
+  const chatId = process.env.CHAT_ID;
   if (!token || !chatId) return;
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -583,7 +583,7 @@ async function notify(text, markdown = false) {
 }
 
 async function notifyUser(telegramId, text) {
-  const token = process.env.TOKEN_BOT;
+  const token = process.env.BOT_TOKEN;
   if (!token) return;
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
