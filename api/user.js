@@ -4,52 +4,60 @@ const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
 export default async function handler(req, res) {
-    // 1. Solo permitimos peticiones POST
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Método no permitido' });
-    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
     try {
-        // 2. Intentamos conectar al clúster Zing
         await client.connect();
         const db = client.db('animalito_db');
-        const collection = db.collection('users');
+        const users = db.collection('users');
+        const withdrawals = db.collection('withdrawals'); // Nueva colección para tus reportes
 
-        const { telegramId, username, reward } = req.body;
+        const { telegramId, username, reward, withdrawAmount } = req.body;
 
-        if (!telegramId) {
-            return res.status(400).json({ error: 'Falta el telegramId en la petición' });
-        }
+        if (!telegramId) return res.status(400).json({ error: 'Falta telegramId' });
 
-        if (reward) {
-            // 3. Si hay una recompensa (ej. compra), actualizamos
-            await collection.updateOne(
-                { telegramId: telegramId.toString() },
-                { 
-                    $inc: { coins: parseInt(reward) }, 
-                    $set: { username: username || "Usuario" } 
-                },
-                { upsert: true }
-            );
-            return res.status(200).json({ success: true });
-        } else {
-            // 4. Si solo es abrir la app, buscamos al usuario
-            const user = await collection.findOne({ telegramId: telegramId.toString() });
+        // ESCENARIO A: REGISTRAR SOLICITUD DE RETIRO
+        if (withdrawAmount) {
+            const lechugasADescontar = withdrawAmount * 10000;
             
-            if (!user) {
-                // Si no existe, lo creamos con saldo 0 para que la app no se quede "muerta"
-                return res.status(200).json({ coins: 0, nuevo: true });
+            // 1. Verificamos saldo
+            const user = await users.findOne({ telegramId: telegramId.toString() });
+            if (!user || user.coins < lechugasADescontar) {
+                return res.status(400).json({ error: 'Saldo insuficiente para el retiro' });
             }
-            
-            return res.status(200).json(user);
+
+            // 2. Guardamos la solicitud para que Javier la revise
+            await withdrawals.insertOne({
+                telegramId,
+                username,
+                amountTON: withdrawAmount,
+                lechugasCost: lechugasADescontar,
+                status: 'pendiente',
+                date: new Date()
+            });
+
+            // 3. Descontamos las lechugas del usuario
+            await users.updateOne(
+                { telegramId: telegramId.toString() },
+                { $inc: { coins: -lechugasADescontar } }
+            );
+
+            return res.status(200).json({ message: 'Retiro registrado' });
         }
+
+        // ESCENARIO B: ACTUALIZAR RECOMPENSA O CREAR USUARIO NUEVO
+        const updateData = reward ? { $inc: { coins: reward } } : { $setOnInsert: { coins: 1000 } };
+        
+        const result = await users.findOneAndUpdate(
+            { telegramId: telegramId.toString() },
+            { ...updateData, $set: { username: username || "Sin nombre" } },
+            { upsert: true, returnDocument: 'after' }
+        );
+
+        res.status(200).json(result);
 
     } catch (error) {
-        // 5. ESTO ES LO MÁS IMPORTANTE: Imprime el error real en los logs de Vercel
-        console.error("ERROR CRÍTICO EN API:", error.message);
-        return res.status(500).json({ 
-            error: 'Fallo de conexión con la base de datos',
-            detalle: error.message 
-        });
+        console.error(error);
+        res.status(500).json({ error: 'Error de servidor' });
     }
 }
