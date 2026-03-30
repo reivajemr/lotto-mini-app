@@ -6,9 +6,13 @@ interface ApiUserResponse {
   user?: {
     coins: number;
     tonBalance: number;
+    completedTasks?: string[];
+    lastDailyBonus?: string | null;
   };
   coins?: number;
   newBalance?: number;
+  taskId?: string;
+  reward?: number;
   message?: string;
   error?: string;
 }
@@ -84,7 +88,33 @@ export async function requestWithdraw(
   }
 }
 
-// 4. Guardar resultado de apuesta y sincronizar balance
+// 4. Completar tarea y sumar recompensa
+export async function completeTask(
+  telegramId: string,
+  username: string,
+  taskId: string,
+  reward: number
+): Promise<ApiUserResponse> {
+  try {
+    const res = await fetch(`${API_BASE}/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegramId,
+        username,
+        action: 'task',
+        taskId,
+        reward,
+      }),
+    });
+    return await res.json();
+  } catch (error) {
+    console.error('Error completing task:', error);
+    return { success: false, error: 'Error de conexión' };
+  }
+}
+
+// 5. Guardar resultado de apuesta y sincronizar balance
 export async function saveBetResult(
   telegramId: string,
   username: string,
