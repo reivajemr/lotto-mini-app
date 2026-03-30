@@ -14,14 +14,11 @@ export default async function handler(req, res) {
 
         const { telegramId, username, withdrawAmount, walletAddress } = req.body;
 
-        if (!telegramId) return res.status(400).json({ error: 'Falta ID' });
+        if (!telegramId) return res.status(400).json({ error: 'Falta telegramId' });
 
-        // LÓGICA DE RETIRO REFORZADA
+        // PROCESAR RETIRO
         if (withdrawAmount) {
-            // BLOQUEO: Si no hay walletAddress, no hay retiro
-            if (!walletAddress) {
-                return res.status(400).json({ error: 'Debes conectar tu Wallet primero' });
-            }
+            if (!walletAddress) return res.status(400).json({ error: 'Wallet no conectada' });
 
             const lechugasADescontar = withdrawAmount * 10000;
             const user = await users.findOne({ telegramId: telegramId.toString() });
@@ -44,20 +41,18 @@ export default async function handler(req, res) {
                 { $inc: { coins: -lechugasADescontar } }
             );
 
-            // ENVÍO CRÍTICO DE NOTIFICACIÓN
-            const botToken = process.env.TOKEN_BOT;
-            const chatId = process.env.ID_DE_CHAT;
+            // NOTIFICACIÓN AL BOT DE JAVIER
             const mensaje = `🚀 *SOLICITUD DE RETIRO*\n\n👤 @${username || 'Usuario'}\n💰 ${withdrawAmount} TON\n🏦 Wallet: \`${walletAddress}\`\n📉 -${lechugasADescontar} 🥬`;
-
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            await fetch(`https://api.telegram.org/bot${process.env.TOKEN_BOT}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, text: mensaje, parse_mode: 'Markdown' })
+                body: JSON.stringify({ chat_id: process.env.ID_DE_CHAT, text: mensaje, parse_mode: 'Markdown' })
             });
 
             return res.status(200).json({ success: true, newBalance: user.coins - lechugasADescontar });
         }
 
+        // CARGA NORMAL DE USUARIO
         const userDoc = await users.findOneAndUpdate(
             { telegramId: telegramId.toString() },
             { $setOnInsert: { coins: 1000, username: username || "Usuario" } },
@@ -65,8 +60,8 @@ export default async function handler(req, res) {
         );
 
         res.status(200).json(userDoc);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     } finally {
         await client.close();
     }
