@@ -4,7 +4,7 @@ tg.expand();
 let tonConnectUI;
 const MI_BILLETERA_RECEPTORA = "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo";
 
-// --- 1. GESTIÓN DE SECCIONES Y NAVEGACIÓN ---
+// --- 1. GESTIÓN DE SECCIONES ---
 
 async function showSection(sectionId) {
     const mainContent = document.getElementById('main-content');
@@ -13,8 +13,12 @@ async function showSection(sectionId) {
         const html = await response.text();
         mainContent.innerHTML = html;
 
+        // CORRECCIÓN: Siempre intentamos inicializar al entrar a wallet
         if (sectionId === 'wallet') {
-            initTonConnect(); // Inicializa la wallet al cargar su sección
+            // Damos un respiro al DOM para que renderice el nuevo HTML
+            setTimeout(() => {
+                initTonConnect();
+            }, 100); 
         }
         actualizarMenuVisual(sectionId);
     } catch (e) {
@@ -22,35 +26,33 @@ async function showSection(sectionId) {
     }
 }
 
-function actualizarMenuVisual(sectionId) {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.getAttribute('onclick').includes(sectionId)) {
-            item.classList.add('active');
-        }
-    });
-}
-
-// --- 2. LÓGICA DE TONCONNECT (BILLETERA) ---
+// --- 2. LÓGICA DE TONCONNECT ---
 
 function initTonConnect() {
     const container = document.getElementById('ton-connect-button-container');
     
-    // Verifica si el contenedor existe y si el SDK ya cargó
     if (container && typeof TON_CONNECT_UI !== 'undefined') {
+        // Si ya existe una instancia previa, debemos "limpiarla" o simplemente reasignar el root
+        // para que vuelva a inyectar el botón en el nuevo contenedor
         if (!tonConnectUI) {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
                 manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
                 buttonRootId: 'ton-connect-button-container'
             });
+        } else {
+            // Forzamos al SDK a mirar el nuevo contenedor del DOM
+            tonConnectUI.uiOptions = {
+                buttonRootId: 'ton-connect-button-container'
+            };
         }
     } else {
-        // Reintento automático si el elemento aún no está en el DOM
-        setTimeout(initTonConnect, 500);
+        // Si el contenedor aún no aparece, reintentamos brevemente
+        setTimeout(initTonConnect, 300);
     }
 }
 
-// Globalizar funciones para que el HTML dinámico las encuentre
+// --- 3. FUNCIONES GLOBALES (SWITCH, COMPRA, RETIRO) ---
+
 window.switchWalletTab = function(tab) {
     const deposit = document.getElementById('deposit-content');
     const withdraw = document.getElementById('withdraw-content');
@@ -71,8 +73,6 @@ window.switchWalletTab = function(tab) {
     }
 };
 
-// --- 3. ACCIONES FINANCIERAS (DEPÓSITO Y RETIRO) ---
-
 window.initPurchase = async function(lechugas, ton) {
     if (!tonConnectUI || !tonConnectUI.account) {
         tg.showAlert("❌ Conecta tu Wallet primero.");
@@ -83,22 +83,21 @@ window.initPurchase = async function(lechugas, ton) {
         validUntil: Math.floor(Date.now() / 1000) + 60,
         messages: [{
             address: MI_BILLETERA_RECEPTORA,
-            amount: (ton * 1000000000).toString() // Conversión a Nanotons
+            amount: (ton * 1000000000).toString()
         }]
     };
 
     try {
         await tonConnectUI.sendTransaction(transaction);
-        tg.showAlert("✅ Pago enviado. Procesando tus lechugas...");
+        tg.showAlert("✅ Pago enviado.");
     } catch (e) {
-        tg.showAlert("❌ Transacción cancelada.");
+        tg.showAlert("❌ Pago cancelado.");
     }
 };
 
 window.requestWithdraw = async function() {
-    // BLOQUEO: Verifica conexión real de la billetera
     if (!tonConnectUI || !tonConnectUI.account) {
-        tg.showAlert("❌ Error: Debes conectar tu Wallet antes de retirar.");
+        tg.showAlert("❌ Conecta tu Wallet primero.");
         return;
     }
 
@@ -106,11 +105,11 @@ window.requestWithdraw = async function() {
     const balanceEl = document.getElementById('balance');
     
     if (isNaN(tonAmount) || tonAmount < 5 || tonAmount > 20) {
-        tg.showAlert("Monto inválido (mínimo 5, máximo 20 TON).");
+        tg.showAlert("Monto inválido (5-20 TON).");
         return;
     }
 
-    tg.showConfirm(`¿Confirmas el retiro de ${tonAmount} TON a tu wallet conectada?`, async (ok) => {
+    tg.showConfirm(`¿Retirar ${tonAmount} TON?`, async (ok) => {
         if (ok) {
             const user = tg.initDataUnsafe.user;
             try {
@@ -121,74 +120,61 @@ window.requestWithdraw = async function() {
                         telegramId: user.id.toString(),
                         withdrawAmount: tonAmount,
                         username: user.username,
-                        walletAddress: tonConnectUI.account.address // Dirección real para la notificación
+                        walletAddress: tonConnectUI.account.address
                     })
                 });
 
                 if (res.ok) {
                     const data = await res.json();
-                    balanceEl.innerText = data.newBalance; // Actualización visual del saldo
-                    tg.showAlert("✅ Solicitud enviada con éxito.");
+                    balanceEl.innerText = data.newBalance;
+                    tg.showAlert("✅ Solicitud enviada.");
                 } else {
-                    const errorData = await res.json();
-                    tg.showAlert(`❌ Error: ${errorData.error}`);
+                    const err = await res.json();
+                    tg.showAlert(`❌ ${err.error}`);
                 }
-            } catch (e) {
-                tg.showAlert("❌ Error de conexión con el servidor.");
-            }
+            } catch (e) { console.error(e); }
         }
     });
 };
 
-// --- 4. DATOS DE USUARIO Y AVATAR ---
+// --- 4. INICIALIZACIÓN ---
+
+function actualizarMenuVisual(sectionId) {
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('onclick').includes(sectionId)) item.classList.add('active');
+    });
+}
 
 async function cargarDatosUsuario() {
     const user = tg.initDataUnsafe.user;
     if (!user) return;
 
     document.getElementById('user-name').innerText = user.first_name || "Usuario";
-    
     const photoEl = document.getElementById('user-photo');
     const initialsEl = document.getElementById('user-initials');
 
-    // Manejo del avatar para evitar que se quede cargando
     if (user.photo_url) {
         photoEl.src = user.photo_url;
         photoEl.onload = () => {
             photoEl.style.display = 'block';
             initialsEl.style.display = 'none';
         };
-        photoEl.onerror = () => mostrarIniciales(user, photoEl, initialsEl);
     } else {
-        mostrarIniciales(user, photoEl, initialsEl);
+        initialsEl.innerText = (user.first_name || "U").charAt(0).toUpperCase();
+        initialsEl.style.display = 'flex';
     }
 
-    // Carga inicial de saldo desde MongoDB
     try {
         const res = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                telegramId: user.id.toString(), 
-                username: user.username 
-            })
+            body: JSON.stringify({ telegramId: user.id.toString(), username: user.username })
         });
         const data = await res.json();
-        if (data.coins !== undefined) {
-            document.getElementById('balance').innerText = data.coins;
-        }
-    } catch (e) {
-        console.error("Error al obtener datos del usuario");
-    }
+        if (data.coins !== undefined) document.getElementById('balance').innerText = data.coins;
+    } catch (e) { console.error(e); }
 }
-
-function mostrarIniciales(user, img, div) {
-    img.style.display = 'none';
-    div.style.display = 'flex';
-    div.innerText = (user.first_name || "U").charAt(0).toUpperCase();
-}
-
-// --- 5. INICIALIZACIÓN ---
 
 document.addEventListener('DOMContentLoaded', () => {
     cargarDatosUsuario();
