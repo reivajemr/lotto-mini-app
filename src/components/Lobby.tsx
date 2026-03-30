@@ -1,7 +1,84 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiCall } from '../App';
 
-const ANIMALS = [
-  { number: 1,  name: 'Carnero',    emoji: '🐑' },
+// ── Tipos ─────────────────────────────────────────────────────
+interface LobbyProps {
+  telegramId: string;
+  username: string;
+  balance: number;
+  onBalanceUpdate: (newBalance: number) => void;
+  showAlert: (msg: string) => void;
+  haptic: (type?: 'light' | 'medium' | 'heavy') => void;
+}
+
+interface Draw {
+  drawId: string;
+  game: string;
+  time: string;
+  status: 'open' | 'closed' | 'drawing' | 'done';
+  closeTime: string;
+  drawTime: string;
+  resultTime: string;
+  winnerNumber?: number;
+  winnerAnimal?: string;
+}
+
+interface AnimalDef {
+  number: number;
+  name: string;
+  emoji: string;
+}
+
+interface Selection {
+  animal: AnimalDef;
+  amount: number;
+}
+
+interface DrawLimit {
+  remaining: number;
+  isFull: boolean;
+}
+
+interface Ticket {
+  ticketId: string;
+  telegramId: string;
+  username: string;
+  drawId: string;
+  drawGame: string;
+  bets: BetResult[];
+  betsCount: number;
+  totalBet: number;
+  totalPrize: number | null;
+  status: 'pending' | 'won' | 'lost';
+  createdAt: string;
+}
+
+interface BetResult {
+  animal: string;
+  number: number;
+  amount: number;
+  won: boolean | null;
+  prize: number | null;
+  status: string;
+}
+
+type ViewType = 'list' | 'bet' | 'ticket' | 'history';
+
+// ── Constantes ────────────────────────────────────────────────
+const BET_CONFIG = {
+  minBet: 50,
+  maxBetPerUser: 1000,
+  maxBetGlobal: 10000,
+  multiplier: 30,
+};
+
+const GAMES = [
+  { id: 'lotto', name: '🎰 Lotto Activo', color: 'teal' },
+  { id: 'granja', name: '🐄 La Granja', color: 'emerald' },
+];
+
+const ANIMALS: AnimalDef[] = [
+  { number: 1,  name: 'Carnero',    emoji: '🐏' },
   { number: 2,  name: 'Toro',       emoji: '🐂' },
   { number: 3,  name: 'Ciempiés',   emoji: '🐛' },
   { number: 4,  name: 'Alacrán',    emoji: '🦂' },
@@ -31,7 +108,7 @@ const ANIMALS = [
   { number: 28, name: 'Venado',     emoji: '🦌' },
   { number: 29, name: 'Morrocoy',   emoji: '🐢' },
   { number: 30, name: 'Caimán',     emoji: '🐊' },
-  { number: 31, name: 'Anteater',   emoji: '🐜' },
+  { number: 31, name: 'Anteater',   emoji: '🦔' },
   { number: 32, name: 'Serpiente',  emoji: '🐍' },
   { number: 33, name: 'Lechuza',    emoji: '🦉' },
   { number: 34, name: 'Loro',       emoji: '🦜' },
@@ -40,213 +117,128 @@ const ANIMALS = [
   { number: 0,  name: 'Ballena',    emoji: '🐋' },
 ];
 
-const BET_CONFIG = {
-  minBet: 50,
-  maxBetPerUser: 1000,
-  maxBetGlobal: 10000,
-  multiplier: 30,
-};
+// ── Countdown hook ────────────────────────────────────────────
+function useCountdown(targetTime: string | null) {
+  const [remaining, setRemaining] = useState('');
 
-const GAMES = [
-  { id: 'lotto',  name: '🎰 Lotto Activo', colorFrom: 'from-blue-600',  colorTo: 'to-blue-800',  badge: 'bg-blue-500'  },
-  { id: 'granja', name: '🐄 La Granja',    colorFrom: 'from-green-600', colorTo: 'to-green-800', badge: 'bg-green-500' },
-];
-
-type DrawStatus = 'open' | 'closed' | 'drawing' | 'done';
-type View = 'list' | 'bet' | 'ticket' | 'history';
-
-interface DrawSlot {
-  drawId: string;
-  game: string;
-  time: string;
-  multiplier: number;
-  status: DrawStatus;
-  winnerNumber: number | null;
-  winnerAnimal: string | null;
-  publishedAt: string | null;
-  closeTime: string;
-  drawTime: string;
-  resultTime: string;
-}
-
-interface Selection {
-  animal: typeof ANIMALS[0];
-  amount: number;
-}
-
-interface Bet {
-  animal: string;
-  number: number;
-  amount: number;
-  won: boolean | null;
-  prize: number | null;
-  status: string;
-}
-
-interface Ticket {
-  ticketId: string;
-  drawId: string;
-  drawGame: string;
-  bets: Bet[];
-  betsCount: number;
-  totalBet: number;
-  totalPrize: number | null;
-  status: 'pending' | 'won' | 'lost';
-  createdAt: string;
-}
-
-interface LobbyProps {
-  balance: number;
-  telegramId: string;
-  username: string;
-  showAlert: (msg: string) => void;
-  haptic: (type?: 'light' | 'medium' | 'heavy') => void;
-  onBalanceUpdate: (n: number) => void;
-}
-
-// ── Reloj Venezuela en tiempo real ───────────────────────────
-function useVzNow() {
-  const [now, setNow] = useState(() =>
-    new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }))
-  );
   useEffect(() => {
-    const t = setInterval(() => {
-      setNow(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' })));
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
+    if (!targetTime) { setRemaining(''); return; }
+
+    const update = () => {
+      const diff = new Date(targetTime).getTime() - Date.now();
+      if (diff <= 0) { setRemaining('¡Ya!'); return; }
+      const m = Math.floor(diff / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setRemaining(`${m}m ${s.toString().padStart(2, '0')}s`);
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  return remaining;
 }
 
-// ── Componente cuenta regresiva ───────────────────────────────
-function Countdown({ targetIso, className = '' }: { targetIso: string; className?: string }) {
-  const now = useVzNow();
-  const diff = Math.max(0, Math.floor((new Date(targetIso).getTime() - now.getTime()) / 1000));
-  const h = Math.floor(diff / 3600);
-  const m = Math.floor((diff % 3600) / 60);
-  const s = diff % 60;
-  const p = (n: number) => String(n).padStart(2, '0');
-  return (
-    <span className={`font-mono font-bold tabular-nums ${className}`}>
-      {h > 0 ? `${p(h)}:` : ''}{p(m)}:{p(s)}
-    </span>
-  );
-}
-
-// ── Badge de estado ───────────────────────────────────────────
-function StatusBadge({ status }: { status: DrawStatus }) {
-  const map: Record<DrawStatus, { bg: string; text: string; label: string }> = {
-    open:    { bg: 'bg-green-500/20',  text: 'text-green-400',  label: '✅ Abierto'   },
-    closed:  { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: '🔒 Cerrando'  },
-    drawing: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: '🎰 Sorteando' },
-    done:    { bg: 'bg-gray-500/20',   text: 'text-gray-400',   label: '✔ Finalizado' },
-  };
-  const s = map[status];
-  return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border border-current ${s.bg} ${s.text} ${status === 'drawing' ? 'animate-pulse' : ''}`}>
-      {s.label}
-    </span>
-  );
-}
-
-export default function Lobby({ balance, telegramId, username, showAlert, haptic, onBalanceUpdate }: LobbyProps) {
-  const [activeGame, setActiveGame]   = useState<'lotto' | 'granja'>('lotto');
-  const [draws, setDraws]             = useState<DrawSlot[]>([]);
+// ── Componente principal ──────────────────────────────────────
+export default function Lobby({
+  telegramId,
+  username,
+  balance,
+  onBalanceUpdate,
+  showAlert,
+  haptic,
+}: LobbyProps) {
+  const [view, setView] = useState<ViewType>('list');
+  const [activeGame, setActiveGame] = useState<'lotto' | 'granja'>('lotto');
+  const [draws, setDraws] = useState<Draw[]>([]);
   const [loadingDraws, setLoadingDraws] = useState(true);
-  const [view, setView]               = useState<View>('list');
-  const [selectedDraw, setSelectedDraw] = useState<DrawSlot | null>(null);
-  const [selections, setSelections]   = useState<Selection[]>([]);
-  const [editingAnimal, setEditingAnimal] = useState<typeof ANIMALS[0] | null>(null);
-  const [tempAmount, setTempAmount]   = useState('100');
-  const [drawLimits, setDrawLimits]   = useState<Record<string, { remaining: number; isFull: boolean }>>({});
-  const [placingBet, setPlacingBet]   = useState(false);
+  const [selectedDraw, setSelectedDraw] = useState<Draw | null>(null);
+  const [selections, setSelections] = useState<Selection[]>([]);
+  const [editingAnimal, setEditingAnimal] = useState<AnimalDef | null>(null);
+  const [tempAmount, setTempAmount] = useState('');
+  const [drawLimits, setDrawLimits] = useState<Record<string, DrawLimit>>({});
+  const [placingBet, setPlacingBet] = useState(false);
   const [currentTicket, setCurrentTicket] = useState<Ticket | null>(null);
-  const [myTickets, setMyTickets]     = useState<Ticket[]>([]);
+  const [myTickets, setMyTickets] = useState<Ticket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const now = useVzNow();
 
-  // ── Cargar sorteos ──────────────────────────────────────────
+  const gameInfo = GAMES.find(g => g.id === activeGame) || GAMES[0];
+
+  // Countdown para próximo sorteo abierto
+  const nextOpenDraw = draws.find(d => d.status === 'open');
+  const currentDrawing = draws.find(d => d.status === 'drawing');
+  const countdown = useCountdown(nextOpenDraw?.closeTime || null);
+  const drawingCountdown = useCountdown(currentDrawing?.resultTime || null);
+
+  // ── Cargar sorteos ─────────────────────────────────────────
   const loadDraws = useCallback(async () => {
     try {
-      const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId, action: 'getDraws', game: activeGame }),
-      });
-      const data = await res.json();
-      if (data.success) setDraws(data.draws);
-    } catch { /* ignorar */ } finally {
+      const data = await apiCall({
+        telegramId,
+        action: 'getDraws',
+        game: activeGame,
+      }) as { success?: boolean; draws?: Draw[]; error?: string };
+
+      if (data?.success && data.draws) {
+        setDraws(data.draws);
+      }
+    } catch (err) {
+      console.error('Error cargando sorteos:', err);
+    } finally {
       setLoadingDraws(false);
     }
   }, [telegramId, activeGame]);
 
   useEffect(() => {
     setLoadingDraws(true);
-    setDraws([]);
     loadDraws();
-    if (refreshRef.current) clearInterval(refreshRef.current);
+
+    // Refrescar sorteos cada 30 segundos
     refreshRef.current = setInterval(loadDraws, 30000);
-    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+    return () => {
+      if (refreshRef.current) clearInterval(refreshRef.current);
+    };
   }, [loadDraws]);
 
-  // ── Cargar límites del sorteo seleccionado ──────────────────
-  const loadLimits = useCallback(async (drawId: string) => {
-    try {
-      const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId, action: 'getDrawLimits', drawId }),
-      });
-      const data = await res.json();
-      if (data.success) setDrawLimits(data.limits || {});
-    } catch { /* ignorar */ }
-  }, [telegramId]);
-
-  // ── Cargar tickets del usuario ──────────────────────────────
-  const loadTickets = useCallback(async () => {
-    setLoadingTickets(true);
-    try {
-      const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegramId, action: 'getTickets' }),
-      });
-      const data = await res.json();
-      if (data.success) setMyTickets(data.tickets || []);
-    } catch { /* ignorar */ } finally {
-      setLoadingTickets(false);
-    }
-  }, [telegramId]);
-
   // ── Abrir vista de apuesta ─────────────────────────────────
-  const openBetView = (draw: DrawSlot) => {
+  const openBetView = async (draw: Draw) => {
+    haptic('medium');
     setSelectedDraw(draw);
     setSelections([]);
     setEditingAnimal(null);
-    setTempAmount('100');
-    setDrawLimits({});
-    loadLimits(draw.drawId);
     setView('bet');
-    haptic('light');
+
+    // Cargar límites
+    try {
+      const data = await apiCall({
+        telegramId,
+        action: 'getDrawLimits',
+        drawId: draw.drawId,
+      }) as { success?: boolean; limits?: Record<string, DrawLimit>; error?: string };
+
+      if (data?.success && data.limits) {
+        setDrawLimits(data.limits);
+      }
+    } catch {
+      /* ignorar */
+    }
   };
 
-  // ── Seleccionar/quitar animal ──────────────────────────────
-  const toggleAnimal = (animal: typeof ANIMALS[0]) => {
-    if (!selectedDraw || selectedDraw.status !== 'open') return;
-    const limit = drawLimits[animal.name];
-    if (limit?.isFull) { showAlert(`⚠️ El límite global de apuestas para ${animal.name} está lleno.`); return; }
-    const exists = selections.find(s => s.animal.number === animal.number);
-    if (exists) {
+  // ── Seleccionar animal ─────────────────────────────────────
+  const toggleAnimal = (animal: AnimalDef) => {
+    haptic('light');
+    const existing = selections.find(s => s.animal.number === animal.number);
+    if (existing) {
       setSelections(prev => prev.filter(s => s.animal.number !== animal.number));
     } else {
       setEditingAnimal(animal);
-      setTempAmount('100');
+      setTempAmount('');
     }
-    haptic('light');
   };
 
-  // ── Confirmar monto para animal ────────────────────────────
+  // ── Confirmar monto para un animal ────────────────────────
   const confirmAmount = () => {
     if (!editingAnimal) return;
     const amount = parseInt(tempAmount);
@@ -255,86 +247,112 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
       return;
     }
     if (amount > BET_CONFIG.maxBetPerUser) {
-      showAlert(`⚠️ Monto máximo por animal: ${BET_CONFIG.maxBetPerUser.toLocaleString()} 🥬`);
+      showAlert(`⚠️ Monto máximo: ${BET_CONFIG.maxBetPerUser.toLocaleString()} 🥬`);
       return;
     }
-    const limit = drawLimits[editingAnimal.name];
-    if (limit && amount > limit.remaining) {
-      showAlert(`⚠️ Solo quedan ${limit.remaining.toLocaleString()} 🥬 disponibles para ${editingAnimal.name}`);
-      return;
-    }
+    haptic('medium');
     setSelections(prev => {
       const existing = prev.find(s => s.animal.number === editingAnimal.number);
-      if (existing) return prev.map(s => s.animal.number === editingAnimal.number ? { ...s, amount } : s);
+      if (existing) {
+        return prev.map(s => s.animal.number === editingAnimal.number ? { ...s, amount } : s);
+      }
       return [...prev, { animal: editingAnimal, amount }];
     });
     setEditingAnimal(null);
+    setTempAmount('');
   };
 
-  const totalBet = selections.reduce((s, x) => s + x.amount, 0);
-  const potentialPrize = selections.reduce((s, x) => s + x.amount * BET_CONFIG.multiplier, 0);
+  // ── Colocar apuesta ────────────────────────────────────────
+  const placeBet = async () => {
+    if (!selectedDraw || selections.length === 0 || placingBet) return;
 
-  // ── Confirmar apuesta ──────────────────────────────────────
-  const confirmBet = async () => {
-    if (!selectedDraw || selections.length === 0) return;
-    if (selectedDraw.status !== 'open') { showAlert('⏰ Este sorteo ya cerró.'); return; }
-    if (balance < totalBet) { showAlert(`⚠️ Saldo insuficiente.\nTienes ${balance.toLocaleString()} 🥬`); return; }
-    haptic('medium');
+    const totalBet = selections.reduce((s, sel) => s + sel.amount, 0);
+    if (totalBet > balance) {
+      showAlert(`⚠️ Saldo insuficiente.\nNecesitas ${totalBet.toLocaleString()} 🥬 pero tienes ${balance.toLocaleString()} 🥬`);
+      return;
+    }
+
+    haptic('heavy');
     setPlacingBet(true);
+
     try {
-      const res = await fetch('/api/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegramId, username, action: 'placeBet',
-          drawId: selectedDraw.drawId,
-          drawGame: activeGame,
-          bets: selections.map(s => ({ animal: s.animal.name, number: s.animal.number, amount: s.amount })),
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        haptic('heavy');
-        onBalanceUpdate(data.newBalance);
+      const data = await apiCall({
+        telegramId,
+        username,
+        action: 'placeBet',
+        drawId: selectedDraw.drawId,
+        drawGame: activeGame,
+        bets: selections.map(s => ({
+          animal: s.animal.name,
+          number: s.animal.number,
+          amount: s.amount,
+        })),
+      }) as { success?: boolean; ticket?: Ticket; newBalance?: number; message?: string; error?: string };
+
+      if (data?.success && data.ticket) {
+        onBalanceUpdate(data.newBalance ?? balance - totalBet);
         setCurrentTicket(data.ticket);
         setView('ticket');
+        haptic('heavy');
       } else {
-        showAlert('❌ ' + (data.error || 'Error al registrar apuesta'));
+        showAlert('❌ ' + (data?.error || 'Error al procesar apuesta'));
       }
-    } catch {
-      showAlert('❌ Error de conexión.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      showAlert('❌ ' + msg);
     } finally {
       setPlacingBet(false);
     }
   };
 
-  const gameInfo = GAMES.find(g => g.id === activeGame)!;
-  const nextOpen = draws.find(d => d.status === 'open');
-  const currentDrawing = draws.find(d => d.status === 'drawing');
+  // ── Cargar mis tickets ─────────────────────────────────────
+  const loadTickets = useCallback(async () => {
+    setLoadingTickets(true);
+    try {
+      const data = await apiCall({
+        telegramId,
+        action: 'getTickets',
+      }) as { success?: boolean; tickets?: Ticket[]; error?: string };
+
+      if (data?.success && data.tickets) {
+        setMyTickets(data.tickets);
+      }
+    } catch {
+      /* ignorar */
+    } finally {
+      setLoadingTickets(false);
+    }
+  }, [telegramId]);
+
+  const totalBet = selections.reduce((s, sel) => s + sel.amount, 0);
+  const potentialPrize = selections.length > 0
+    ? Math.max(...selections.map(s => s.amount)) * BET_CONFIG.multiplier
+    : 0;
 
   // ════════════════════════════════════════════════════════════
   // VISTA: LISTA DE SORTEOS
   // ════════════════════════════════════════════════════════════
   if (view === 'list') return (
-    <div className="flex flex-col gap-4 p-4 pb-6">
+    <div className="p-4 space-y-4">
 
       {/* Hero */}
-      <div className={`bg-gradient-to-r ${gameInfo.colorFrom} ${gameInfo.colorTo} rounded-2xl p-5 text-center shadow-lg`}>
-        <p className="text-4xl mb-1">{activeGame === 'lotto' ? '🎰' : '🐄'}</p>
-        <h2 className="text-xl font-bold text-white">{gameInfo.name}</h2>
-        <p className="text-sm text-white/70 mt-1">12 sorteos diarios · Premio x{BET_CONFIG.multiplier} · Resultados oficiales</p>
+      <div className="bg-gradient-to-br from-teal-600/30 to-emerald-600/20 border border-teal-500/30 rounded-2xl p-5 text-center">
+        <div className="text-4xl mb-2">{activeGame === 'lotto' ? '🎰' : '🐄'}</div>
+        <h2 className="text-white font-bold text-lg">{gameInfo.name}</h2>
+        <p className="text-white/50 text-xs mt-1">
+          12 sorteos diarios · Premio x{BET_CONFIG.multiplier} · Resultados oficiales
+        </p>
 
-        {nextOpen && (
-          <div className="mt-3 bg-black/20 rounded-xl p-3">
-            <p className="text-xs text-white/60 mb-1">⏱ Próximo sorteo ({nextOpen.time}) cierra en:</p>
-            <Countdown targetIso={nextOpen.closeTime} className="text-yellow-300 text-xl" />
+        {nextOpenDraw && (
+          <div className="mt-3 bg-teal-500/20 rounded-xl px-3 py-2">
+            <p className="text-teal-200 text-xs">⏱ Próximo sorteo ({nextOpenDraw.time}) cierra en:</p>
+            <p className="text-white font-bold text-lg">{countdown}</p>
           </div>
         )}
-        {currentDrawing && !nextOpen && (
-          <div className="mt-3 bg-orange-500/30 rounded-xl p-3 animate-pulse">
-            <p className="text-white font-bold">🎰 Sorteando ahora — {currentDrawing.time}</p>
-            <p className="text-white/70 text-xs">Resultado disponible en:</p>
-            <Countdown targetIso={currentDrawing.resultTime} className="text-orange-200 text-lg" />
+        {currentDrawing && !nextOpenDraw && (
+          <div className="mt-3 bg-orange-500/20 rounded-xl px-3 py-2">
+            <p className="text-orange-200 text-xs">🎰 Sorteando ahora — {currentDrawing.time}</p>
+            <p className="text-white font-bold text-lg">{drawingCountdown}</p>
           </div>
         )}
       </div>
@@ -342,32 +360,46 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
       {/* Selector de juego */}
       <div className="flex bg-white/5 rounded-xl p-1 gap-1">
         {GAMES.map(g => (
-          <button key={g.id} onClick={() => { setActiveGame(g.id as any); haptic('light'); }}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              activeGame === g.id ? `${g.badge} text-white shadow` : 'text-gray-400 hover:text-white'
-            }`}>
+          <button
+            key={g.id}
+            onClick={() => { haptic('light'); setActiveGame(g.id as 'lotto' | 'granja'); }}
+            className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+              activeGame === g.id
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'text-white/50 hover:text-white/70'
+            }`}
+          >
             {g.name}
           </button>
         ))}
       </div>
 
       {/* Botón historial */}
-      <button onClick={() => { loadTickets(); setView('history'); haptic('light'); }}
-        className="flex items-center justify-between bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 transition">
-        <span className="text-sm font-semibold text-white">🎫 Mis Tickets</span>
-        <span className="text-xs text-teal-400">Ver historial →</span>
+      <button
+        onClick={() => { haptic('light'); loadTickets(); setView('history'); }}
+        className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-3 text-white/70 text-sm font-medium transition-all flex items-center justify-center gap-2"
+      >
+        🎫 Ver mis tickets
       </button>
 
       {/* Lista de sorteos */}
-      <div>
-        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">
-          Sorteos de hoy — {now.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })}
+      <div className="space-y-3">
+        <p className="text-white/50 text-xs font-medium uppercase tracking-wider">
+          Sorteos de hoy — {new Date().toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
 
         {loadingDraws ? (
-          <div className="text-center py-10 text-gray-400">
-            <p className="text-3xl animate-spin mb-2">⏳</p>
-            <p>Cargando sorteos...</p>
+          <div className="text-center py-8">
+            <p className="text-3xl animate-bounce">⏳</p>
+            <p className="text-white/50 text-sm mt-2">Cargando sorteos...</p>
+          </div>
+        ) : draws.length === 0 ? (
+          <div className="text-center py-8 bg-white/3 rounded-2xl">
+            <p className="text-3xl mb-2">🕐</p>
+            <p className="text-white/60 text-sm">No hay sorteos disponibles</p>
+            <button onClick={loadDraws} className="mt-3 text-teal-400 text-sm underline">
+              Reintentar
+            </button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -378,7 +410,8 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
               const canBet = draw.status === 'open';
 
               return (
-                <div key={draw.drawId}
+                <div
+                  key={draw.drawId}
                   onClick={() => canBet ? openBetView(draw) : undefined}
                   className={`flex items-center justify-between rounded-xl p-3.5 border transition-all ${
                     canBet
@@ -386,32 +419,52 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
                       : draw.status === 'drawing'
                       ? 'bg-orange-500/10 border-orange-500/30'
                       : 'bg-white/3 border-white/5 opacity-60'
-                  }`}>
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
-                      canBet ? 'bg-green-500/20' :
-                      draw.status === 'drawing' ? 'bg-orange-500/20 animate-pulse' : 'bg-gray-500/20'
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
+                      canBet ? 'bg-teal-500/20' : 'bg-white/5'
                     }`}>
                       {draw.status === 'done' && animalData ? animalData.emoji : '🕐'}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-white font-semibold text-sm">
                         {draw.time} {parseInt(draw.time) < 12 ? 'AM' : 'PM'}
                       </p>
-                      {canBet && <p className="text-xs text-green-400">Cierra: <Countdown targetIso={draw.closeTime} /></p>}
-                      {draw.status === 'drawing' && <p className="text-xs text-orange-400">Resultado en: <Countdown targetIso={draw.resultTime} /></p>}
+                      {canBet && (
+                        <p className="text-teal-300 text-xs">
+                          Cierra: <DrawCloseCountdown closeTime={draw.closeTime} />
+                        </p>
+                      )}
+                      {draw.status === 'drawing' && (
+                        <p className="text-orange-300 text-xs">
+                          Resultado en: <DrawCloseCountdown closeTime={draw.resultTime} />
+                        </p>
+                      )}
                       {draw.status === 'done' && animalData && (
-                        <p className="text-xs text-gray-400">{animalData.emoji} {draw.winnerAnimal} #{draw.winnerNumber}</p>
+                        <p className="text-green-400 text-xs">
+                          {animalData.emoji} {draw.winnerAnimal} #{draw.winnerNumber}
+                        </p>
                       )}
                       {draw.status === 'done' && !draw.winnerAnimal && (
-                        <p className="text-xs text-gray-500">Sin resultado aún</p>
+                        <p className="text-white/40 text-xs">Sin resultado aún</p>
                       )}
-                      {draw.status === 'closed' && <p className="text-xs text-yellow-400">🔒 Apuestas cerradas</p>}
+                      {draw.status === 'closed' && (
+                        <p className="text-white/40 text-xs">🔒 Apuestas cerradas</p>
+                      )}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <StatusBadge status={draw.status} />
-                    {canBet && <span className="text-xs text-teal-400 font-semibold">Apostar →</span>}
+                  <div>
+                    {canBet && (
+                      <span className="bg-teal-500/20 text-teal-300 text-xs px-2.5 py-1 rounded-lg font-medium">
+                        Apostar →
+                      </span>
+                    )}
+                    {draw.status === 'drawing' && (
+                      <span className="bg-orange-500/20 text-orange-300 text-xs px-2.5 py-1 rounded-lg">
+                        🎰 Sorteando
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -424,15 +477,15 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
       <div className="grid grid-cols-3 gap-2">
         {[
           { icon: '🔒', text: 'Cierra 10 min antes' },
-          { icon: '📢', text: 'Resultado en 5 min'  },
-          { icon: '🏆', text: `Premio x${BET_CONFIG.multiplier}`  },
+          { icon: '📢', text: 'Resultado en 5 min' },
+          { icon: '🏆', text: `Premio x${BET_CONFIG.multiplier}` },
           { icon: '📡', text: 'Resultados oficiales' },
-          { icon: '💰', text: `Mín: ${BET_CONFIG.minBet}🥬`  },
+          { icon: '💰', text: `Mín: ${BET_CONFIG.minBet}🥬` },
           { icon: '💎', text: `Máx: ${BET_CONFIG.maxBetPerUser.toLocaleString()}🥬` },
         ].map((item, i) => (
-          <div key={i} className="bg-white/5 rounded-xl p-2 text-center">
-            <p className="text-base">{item.icon}</p>
-            <p className="text-[10px] text-gray-400 leading-tight mt-1">{item.text}</p>
+          <div key={i} className="bg-white/3 rounded-xl p-2.5 text-center">
+            <p className="text-lg">{item.icon}</p>
+            <p className="text-white/50 text-[10px] mt-0.5 leading-tight">{item.text}</p>
           </div>
         ))}
       </div>
@@ -443,127 +496,147 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
   // VISTA: APUESTA
   // ════════════════════════════════════════════════════════════
   if (view === 'bet') return (
-    <div className="flex flex-col gap-4 p-4 pb-6">
+    <div className="p-4 space-y-4">
 
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => { setView('list'); setSelectedDraw(null); setSelections([]); haptic('light'); }}
-          className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center text-white hover:bg-white/20">
-          ←
-        </button>
-        <div className="flex-1">
-          <h2 className="text-lg font-bold text-white">{gameInfo.name}</h2>
-          <p className="text-xs text-gray-400">Sorteo {selectedDraw?.time} · x{BET_CONFIG.multiplier}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold">{gameInfo.name}</h3>
+          <p className="text-white/50 text-xs">
+            Sorteo {selectedDraw?.time} · x{BET_CONFIG.multiplier}
+          </p>
         </div>
-        {selectedDraw && <StatusBadge status={selectedDraw.status} />}
+        <button
+          onClick={() => { haptic('light'); setView('list'); }}
+          className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl text-white/70 text-sm transition-all"
+        >
+          ← Volver
+        </button>
       </div>
 
-      {/* Cuenta regresiva */}
+      {/* Estado del sorteo */}
       {selectedDraw?.status === 'open' && (
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 text-center">
-          <p className="text-xs text-gray-400 mb-1">⏱ Las apuestas cierran en:</p>
-          <Countdown targetIso={selectedDraw.closeTime} className="text-green-400 text-2xl" />
+        <div className="bg-teal-500/15 border border-teal-500/30 rounded-xl p-3 text-center">
+          <p className="text-teal-300 text-xs">
+            ⏱ Las apuestas cierran en: <span className="font-bold">
+              <DrawCloseCountdown closeTime={selectedDraw.closeTime} />
+            </span>
+          </p>
         </div>
       )}
       {selectedDraw?.status !== 'open' && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
-          <p className="text-red-400 font-semibold">🔒 Este sorteo ya cerró</p>
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-center">
+          <p className="text-red-300 text-xs">🔒 Este sorteo ya cerró</p>
         </div>
       )}
 
-      {/* Editor de monto inline */}
+      {/* Editor de monto */}
       {editingAnimal && (
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-4xl">{editingAnimal.emoji}</span>
+        <div className="bg-white/5 border border-white/15 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{editingAnimal.emoji}</span>
             <div>
-              <p className="font-bold text-white">{editingAnimal.name} #{editingAnimal.number}</p>
-              <p className="text-xs text-gray-400">
+              <p className="text-white font-bold">{editingAnimal.name} #{editingAnimal.number}</p>
+              <p className="text-white/40 text-xs">
                 {drawLimits[editingAnimal.name]
-                  ? `Disponible globalmente: ${drawLimits[editingAnimal.name].remaining.toLocaleString()} 🥬`
+                  ? `Disponible: ${drawLimits[editingAnimal.name].remaining.toLocaleString()} 🥬`
                   : `Máx global: ${BET_CONFIG.maxBetGlobal.toLocaleString()} 🥬`}
               </p>
             </div>
           </div>
 
-          <p className="text-xs text-gray-400 mb-2">Monto a apostar (🥬):</p>
-          <div className="flex gap-1.5 flex-wrap mb-3">
+          <p className="text-white/60 text-sm">Monto a apostar (🥬):</p>
+          <div className="flex gap-2 flex-wrap">
             {[50, 100, 250, 500, 1000].map(amt => (
-              <button key={amt} onClick={() => setTempAmount(String(amt))}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${
-                  tempAmount === String(amt) ? 'bg-teal-500 text-white' : 'bg-white/10 text-gray-300'
-                }`}>
+              <button
+                key={amt}
+                onClick={() => setTempAmount(String(amt))}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  tempAmount === String(amt)
+                    ? 'bg-teal-500 text-white'
+                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                }`}
+              >
                 {amt}
               </button>
             ))}
           </div>
 
           <input
-            type="number" min={BET_CONFIG.minBet} max={BET_CONFIG.maxBetPerUser}
+            type="number"
             value={tempAmount}
             onChange={e => setTempAmount(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white text-center text-lg font-bold focus:outline-none focus:border-teal-500 mb-3"
+            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white text-center text-lg font-bold focus:outline-none focus:border-teal-500"
             placeholder="Monto..."
           />
 
           {tempAmount && !isNaN(parseInt(tempAmount)) && (
-            <p className="text-xs text-green-400 text-center mb-3">
+            <p className="text-teal-300 text-center text-sm">
               Premio si ganas: {(parseInt(tempAmount || '0') * BET_CONFIG.multiplier).toLocaleString()} 🥬
             </p>
           )}
 
           <div className="flex gap-2">
-            <button onClick={() => setEditingAnimal(null)}
-              className="flex-1 bg-white/10 text-gray-300 py-2.5 rounded-xl text-sm font-semibold">
+            <button
+              onClick={() => { setEditingAnimal(null); setTempAmount(''); }}
+              className="flex-1 bg-white/10 text-white/60 py-2.5 rounded-xl font-medium"
+            >
               Cancelar
             </button>
-            <button onClick={confirmAmount}
-              className="flex-1 bg-teal-500 hover:bg-teal-400 text-white py-2.5 rounded-xl text-sm font-bold">
-              ✅ Confirmar
+            <button
+              onClick={confirmAmount}
+              className="flex-1 bg-teal-500 hover:bg-teal-400 text-white py-2.5 rounded-xl font-bold transition-all active:scale-95"
+            >
+              ✅ Agregar
             </button>
           </div>
         </div>
       )}
 
-      {/* Carrito de selecciones */}
+      {/* Carrito */}
       {selections.length > 0 && !editingAnimal && (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold text-white">🎯 Tu apuesta</p>
-            <p className="text-xs text-gray-400">{selections.length} animal{selections.length !== 1 ? 'es' : ''}</p>
+        <div className="bg-teal-500/10 border border-teal-500/30 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-white font-semibold">🎯 Tu apuesta</p>
+            <p className="text-teal-300 text-xs">{selections.length} animal{selections.length !== 1 ? 'es' : ''}</p>
           </div>
 
-          <div className="space-y-2 mb-3">
+          <div className="space-y-2">
             {selections.map(s => (
-              <div key={s.animal.number} className="flex items-center gap-2">
+              <div key={s.animal.number} className="flex items-center gap-3 bg-white/5 rounded-xl p-2.5">
                 <span className="text-xl">{s.animal.emoji}</span>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold text-white">{s.animal.name}</p>
-                  <p className="text-xs text-gray-400">Premio: {(s.amount * BET_CONFIG.multiplier).toLocaleString()} 🥬</p>
+                  <p className="text-white text-sm font-medium">{s.animal.name}</p>
+                  <p className="text-white/40 text-xs">Premio: {(s.amount * BET_CONFIG.multiplier).toLocaleString()} 🥬</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-teal-400">{s.amount.toLocaleString()} 🥬</span>
-                  <button onClick={() => { setEditingAnimal(s.animal); setTempAmount(String(s.amount)); }}
-                    className="text-xs bg-white/10 px-2 py-1 rounded-lg text-gray-300">✏️</button>
-                  <button onClick={() => setSelections(prev => prev.filter(x => x.animal.number !== s.animal.number))}
-                    className="text-xs bg-red-500/20 px-2 py-1 rounded-lg text-red-400">✕</button>
-                </div>
+                <p className="text-teal-300 font-bold text-sm">{s.amount.toLocaleString()} 🥬</p>
+                <button
+                  onClick={() => setSelections(prev => prev.filter(x => x.animal.number !== s.animal.number))}
+                  className="text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-white/10 pt-2 flex justify-between text-xs">
-            <span className="text-gray-400">Total a descontar:</span>
-            <span className="font-bold text-white">{totalBet.toLocaleString()} 🥬</span>
-          </div>
-          <div className="flex justify-between text-xs mt-1">
-            <span className="text-gray-400">Mayor premio posible:</span>
-            <span className="font-bold text-green-400">{potentialPrize.toLocaleString()} 🥬</span>
+          <div className="border-t border-white/10 pt-3 space-y-1">
+            <div className="flex justify-between">
+              <span className="text-white/60 text-sm">Total a descontar:</span>
+              <span className="text-white font-bold">{totalBet.toLocaleString()} 🥬</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/60 text-sm">Mayor premio posible:</span>
+              <span className="text-teal-400 font-bold">{potentialPrize.toLocaleString()} 🥬</span>
+            </div>
           </div>
 
-          <button onClick={confirmBet} disabled={placingBet || selectedDraw?.status !== 'open'}
-            className="mt-3 w-full bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-white font-bold py-3.5 rounded-xl transition-all">
-            {placingBet ? '⏳ Registrando...' : `🎯 Confirmar apuesta — ${totalBet.toLocaleString()} 🥬`}
+          <button
+            onClick={placeBet}
+            disabled={placingBet || selectedDraw?.status !== 'open'}
+            className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {placingBet ? '⏳ Procesando...' : `🎯 Apostar ${totalBet.toLocaleString()} 🥬`}
           </button>
         </div>
       )}
@@ -571,33 +644,38 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
       {/* Grid de animales */}
       {!editingAnimal && (
         <>
-          <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">
-            🐾 Elige uno o varios animalitos
-          </p>
+          <p className="text-white/60 text-sm text-center">🐾 Elige uno o varios animalitos</p>
           <div className="grid grid-cols-4 gap-2">
             {ANIMALS.map(animal => {
               const isSelected = selections.some(s => s.animal.number === animal.number);
               const limit = drawLimits[animal.name];
               const isFull = limit?.isFull;
+
               return (
-                <button key={animal.number}
-                  onClick={() => toggleAnimal(animal)}
-                  disabled={isFull && !isSelected || selectedDraw?.status !== 'open'}
-                  className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
-                    isFull && !isSelected
-                      ? 'bg-red-500/10 border-red-500/20 opacity-50 cursor-not-allowed'
-                      : isSelected
-                      ? 'bg-teal-500/30 border-teal-500 scale-105 shadow-lg shadow-teal-500/20'
-                      : 'bg-white/5 border-white/10 hover:bg-white/15'
-                  }`}>
-                  <span className="text-2xl leading-none">{animal.emoji}</span>
-                  <span className="text-[9px] text-gray-300 mt-1 text-center font-medium leading-tight">{animal.name}</span>
-                  <span className="text-[8px] text-gray-500">#{animal.number}</span>
-                  {isFull && <span className="text-[8px] text-red-400 mt-0.5">LLENO</span>}
-                  {isSelected && !isFull && (
-                    <span className="text-[8px] text-teal-300">
-                      {selections.find(s => s.animal.number === animal.number)?.amount}🥬
-                    </span>
+                <button
+                  key={animal.number}
+                  onClick={() => !isFull && selectedDraw?.status === 'open' && toggleAnimal(animal)}
+                  disabled={isFull || selectedDraw?.status !== 'open'}
+                  className={`relative rounded-xl p-2 text-center transition-all active:scale-95 ${
+                    isSelected
+                      ? 'bg-teal-500/30 border-2 border-teal-400 scale-[0.97]'
+                      : isFull
+                      ? 'bg-white/3 border border-white/5 opacity-40'
+                      : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <p className="text-2xl">{animal.emoji}</p>
+                  <p className="text-white/70 text-[9px] mt-0.5 leading-tight">{animal.name}</p>
+                  <p className="text-white/40 text-[9px]">#{animal.number}</p>
+                  {isSelected && (
+                    <div className="absolute -top-1 -right-1 bg-teal-500 rounded-full w-4 h-4 flex items-center justify-center text-[9px]">
+                      ✓
+                    </div>
+                  )}
+                  {isFull && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40">
+                      <span className="text-xs">🔒</span>
+                    </div>
                   )}
                 </button>
               );
@@ -605,7 +683,7 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
           </div>
 
           {selections.length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-2">
+            <p className="text-white/30 text-xs text-center">
               Toca un animalito para seleccionarlo. Puedes elegir varios.
             </p>
           )}
@@ -613,9 +691,9 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
       )}
 
       {/* Balance */}
-      <div className="flex items-center justify-between bg-white/5 rounded-xl px-4 py-3">
-        <span className="text-sm text-gray-400">Tu saldo:</span>
-        <span className="font-bold text-white">{balance.toLocaleString()} 🥬</span>
+      <div className="bg-white/3 rounded-xl p-3 text-center">
+        <span className="text-white/50 text-xs">Tu saldo: </span>
+        <span className="text-teal-400 font-bold">{balance.toLocaleString()} 🥬</span>
       </div>
     </div>
   );
@@ -624,106 +702,108 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
   // VISTA: TICKET
   // ════════════════════════════════════════════════════════════
   if (view === 'ticket' && currentTicket) {
-    const drawParts = currentTicket.drawId.split('-');
-    const timeStr = drawParts[drawParts.length - 1];
+    const parts = currentTicket.drawId.split('-');
+    const timeStr = parts[parts.length - 1];
     const timeFormatted = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
     const gameName = currentTicket.drawGame === 'lotto' ? '🎰 Lotto Activo' : '🐄 La Granja';
     const draw = draws.find(d => d.drawId === currentTicket.drawId);
-    const hasResult = draw?.winnerAnimal != null;
+    const hasResult = draw?.status === 'done' && draw.winnerAnimal;
 
     return (
-      <div className="flex flex-col gap-4 p-4 pb-6">
+      <div className="p-4 space-y-4">
 
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <button onClick={() => setView('list')}
-            className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center text-white">←</button>
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-white">🎫 Ticket de Apuesta</p>
-            <p className="text-xs text-gray-400 font-mono">{currentTicket.ticketId}</p>
+            <h3 className="text-white font-bold">🎫 Ticket de Apuesta</h3>
+            <p className="text-teal-300 text-xs font-mono">{currentTicket.ticketId}</p>
           </div>
+          <button
+            onClick={() => { haptic('light'); setView('list'); }}
+            className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl text-white/70 text-sm transition-all"
+          >
+            ← Volver
+          </button>
         </div>
 
         {/* Ticket card */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-white/5 border border-white/15 rounded-2xl overflow-hidden">
 
-          {/* Cabecera */}
-          <div className={`p-4 text-center ${
-            currentTicket.status === 'won' ? 'bg-green-500/20' :
-            currentTicket.status === 'lost' ? 'bg-red-500/10' : 'bg-blue-500/10'
-          }`}>
-            <p className="font-bold text-white">{gameName}</p>
-            <p className="text-2xl font-bold text-teal-400">Sorteo {timeFormatted}</p>
-            <p className="text-xs text-gray-400">
+          {/* Cabecera del ticket */}
+          <div className="bg-gradient-to-r from-teal-600/40 to-emerald-600/30 p-4 text-center">
+            <p className="text-white font-bold">{gameName}</p>
+            <p className="text-teal-200 text-sm">Sorteo {timeFormatted}</p>
+            <p className="text-white/50 text-xs mt-1">
               {new Date(currentTicket.createdAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' })}
             </p>
             {currentTicket.status === 'won' && (
-              <p className="text-green-400 font-bold text-lg mt-2">🎉 ¡GANASTE! +{currentTicket.totalPrize?.toLocaleString()} 🥬</p>
+              <p className="text-green-400 font-bold mt-2">🎉 ¡GANASTE! +{currentTicket.totalPrize?.toLocaleString()} 🥬</p>
             )}
             {currentTicket.status === 'lost' && (
-              <p className="text-red-400 font-semibold mt-2">😔 No ganaste esta vez</p>
+              <p className="text-red-400 text-sm mt-2">😔 No ganaste esta vez</p>
             )}
             {currentTicket.status === 'pending' && (
-              <p className="text-yellow-400 mt-2">⏳ Esperando resultado del sorteo...</p>
+              <p className="text-yellow-300 text-sm mt-2">⏳ Esperando resultado del sorteo...</p>
             )}
-          </div>
-
-          {/* Línea punteada */}
-          <div className="flex items-center px-4 py-2">
-            <div className="flex-1 border-t-2 border-dashed border-white/10" />
-            <span className="mx-2 text-gray-600 text-xs">✂</span>
-            <div className="flex-1 border-t-2 border-dashed border-white/10" />
           </div>
 
           {/* Resultado del sorteo */}
           {hasResult && draw && (
-            <div className="mx-4 mb-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3">
-              <span className="text-3xl">{ANIMALS.find(a => a.name === draw.winnerAnimal)?.emoji || '🐾'}</span>
+            <div className="bg-green-500/10 border-b border-white/5 p-4 flex items-center gap-3">
+              <span className="text-3xl">
+                {ANIMALS.find(a => a.name === draw.winnerAnimal)?.emoji || '🐾'}
+              </span>
               <div>
-                <p className="text-xs text-gray-400">Animal ganador</p>
-                <p className="font-bold text-white">{draw.winnerAnimal} #{draw.winnerNumber}</p>
+                <p className="text-white/50 text-xs">Animal ganador</p>
+                <p className="text-green-300 font-bold">{draw.winnerAnimal} #{draw.winnerNumber}</p>
               </div>
             </div>
           )}
 
           {/* Lista de apuestas */}
-          <div className="px-4 pb-4">
-            <p className="text-xs text-gray-400 font-semibold mb-2">Tus apuestas ({currentTicket.betsCount})</p>
+          <div className="p-4 space-y-3">
+            <p className="text-white/60 text-xs font-medium uppercase tracking-wider">
+              Tus apuestas ({currentTicket.betsCount})
+            </p>
+
             <div className="space-y-2">
               {currentTicket.bets.map((bet, i) => {
                 const animalData = ANIMALS.find(a => a.name === bet.animal);
                 return (
-                  <div key={i} className={`flex items-center justify-between rounded-xl p-2.5 ${
-                    bet.won === true ? 'bg-green-500/15' :
-                    bet.won === false ? 'bg-red-500/10' : 'bg-white/5'
-                  }`}>
-                    <div className="flex items-center gap-2">
+                  <div key={i} className="flex items-center gap-3 bg-white/3 rounded-xl p-3">
+                    <div className="flex items-center gap-2 flex-1">
                       <span className="text-xl">{animalData?.emoji || '🐾'}</span>
                       <div>
-                        <p className="text-xs font-semibold text-white">{bet.animal}</p>
-                        <p className="text-[10px] text-gray-500">#{animalData?.number}</p>
+                        <p className="text-white text-sm font-medium">{bet.animal}</p>
+                        <p className="text-white/40 text-xs">#{animalData?.number}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-white">{bet.amount.toLocaleString()} 🥬</p>
-                      {bet.won === true && <p className="text-xs text-green-400">+{bet.prize?.toLocaleString()} 🥬</p>}
-                      {bet.won === false && <p className="text-xs text-red-400">Perdiste</p>}
-                      {bet.status === 'pending' && <p className="text-[10px] text-gray-500">≈{(bet.amount * BET_CONFIG.multiplier).toLocaleString()}</p>}
+                      <p className="text-white text-sm">{bet.amount.toLocaleString()} 🥬</p>
+                      {bet.won === true && (
+                        <p className="text-green-400 text-xs font-bold">+{bet.prize?.toLocaleString()} 🥬</p>
+                      )}
+                      {bet.won === false && (
+                        <p className="text-red-400 text-xs">Perdiste</p>
+                      )}
+                      {bet.status === 'pending' && (
+                        <p className="text-yellow-300/50 text-xs">≈{(bet.amount * BET_CONFIG.multiplier).toLocaleString()}</p>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="border-t border-white/10 mt-3 pt-3 space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-400">Total apostado:</span>
-                <span className="font-bold text-white">{currentTicket.totalBet.toLocaleString()} 🥬</span>
+            <div className="border-t border-white/10 pt-3 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-white/60 text-sm">Total apostado:</span>
+                <span className="text-white font-bold">{currentTicket.totalBet.toLocaleString()} 🥬</span>
               </div>
               {currentTicket.status === 'pending' && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">Premio máximo posible:</span>
-                  <span className="font-bold text-green-400">
+                <div className="flex justify-between">
+                  <span className="text-white/60 text-sm">Premio máximo posible:</span>
+                  <span className="text-teal-400 font-bold">
                     {(Math.max(...currentTicket.bets.map(b => b.amount)) * BET_CONFIG.multiplier).toLocaleString()} 🥬
                   </span>
                 </div>
@@ -731,22 +811,28 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
             </div>
           </div>
 
-          {/* Footer ticket */}
-          <div className="bg-white/3 px-4 py-3 text-center">
-            <p className="text-[10px] font-mono text-gray-500">{currentTicket.ticketId}</p>
-            <p className="text-[10px] text-gray-600">Animalito Lotto · Red Testnet TON</p>
+          {/* Footer del ticket */}
+          <div className="bg-black/20 p-3 text-center">
+            <p className="text-white/30 text-xs font-mono">{currentTicket.ticketId}</p>
+            <p className="text-white/20 text-[10px] mt-0.5">Animalito Lotto · Red Testnet TON</p>
           </div>
         </div>
 
         {/* Botones */}
-        <button onClick={() => setView('list')}
-          className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-3.5 rounded-xl transition">
-          ← Volver a sorteos
-        </button>
-        <button onClick={() => { loadTickets(); setView('history'); }}
-          className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-3 rounded-xl transition">
-          🎫 Ver todos mis tickets
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => { haptic('light'); setView('list'); }}
+            className="flex-1 bg-white/10 hover:bg-white/15 text-white py-3 rounded-xl font-medium transition-all"
+          >
+            🎰 Seguir apostando
+          </button>
+          <button
+            onClick={() => { haptic('light'); loadTickets(); setView('history'); }}
+            className="flex-1 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 py-3 rounded-xl font-medium transition-all border border-teal-500/30"
+          >
+            🎫 Mis tickets
+          </button>
+        </div>
       </div>
     );
   }
@@ -754,114 +840,140 @@ export default function Lobby({ balance, telegramId, username, showAlert, haptic
   // ════════════════════════════════════════════════════════════
   // VISTA: HISTORIAL
   // ════════════════════════════════════════════════════════════
-  if (view === 'history') return (
-    <div className="flex flex-col gap-4 p-4 pb-6">
+  if (view === 'history') {
+    const wonTickets = myTickets.filter(t => t.status === 'won').length;
+    const lostTickets = myTickets.filter(t => t.status === 'lost').length;
+    const pendingTickets = myTickets.filter(t => t.status === 'pending').length;
+    const totalPrize = myTickets.reduce((s, t) => s + (t.totalPrize || 0), 0);
 
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => setView('list')}
-          className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center text-white">←</button>
-        <div>
-          <p className="text-lg font-bold text-white">🎫 Mis Tickets</p>
-          <p className="text-xs text-gray-400">Historial de apuestas</p>
+    return (
+      <div className="p-4 space-y-4">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-bold">🎫 Mis Tickets</h3>
+            <p className="text-white/50 text-xs">Historial de apuestas</p>
+          </div>
+          <button
+            onClick={() => { haptic('light'); setView('list'); }}
+            className="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl text-white/70 text-sm transition-all"
+          >
+            ← Volver
+          </button>
         </div>
-      </div>
 
-      {/* Stats */}
-      {myTickets.length > 0 && (() => {
-        const won     = myTickets.filter(t => t.status === 'won').length;
-        const lost    = myTickets.filter(t => t.status === 'lost').length;
-        const pending = myTickets.filter(t => t.status === 'pending').length;
-        const totalPrize = myTickets.reduce((s, t) => s + (t.totalPrize || 0), 0);
-        return (
+        {/* Stats */}
+        {myTickets.length > 0 && (
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: '✅ Ganados',   val: won,                            color: 'text-green-400'  },
-              { label: '❌ Perdidos',  val: lost,                           color: 'text-red-400'    },
-              { label: '⏳ Pendientes', val: pending,                       color: 'text-yellow-400' },
-              { label: '💰 Premios',   val: `${totalPrize.toLocaleString()}🥬`, color: 'text-teal-400' },
+              { label: '✅ Ganados',    val: wonTickets,                       color: 'text-green-400' },
+              { label: '❌ Perdidos',   val: lostTickets,                      color: 'text-red-400' },
+              { label: '⏳ Pendientes', val: pendingTickets,                   color: 'text-yellow-400' },
+              { label: '💰 Premios',    val: `${totalPrize.toLocaleString()}🥬`, color: 'text-teal-400' },
             ].map(({ label, val, color }) => (
-              <div key={label} className="bg-white/5 rounded-xl p-2 text-center">
-                <p className={`text-base font-bold ${color}`}>{val}</p>
-                <p className="text-[9px] text-gray-500 leading-tight">{label}</p>
+              <div key={label} className="bg-white/5 rounded-xl p-2.5 text-center">
+                <p className={`font-bold text-sm ${color}`}>{val}</p>
+                <p className="text-white/40 text-[9px] mt-0.5 leading-tight">{label}</p>
               </div>
             ))}
           </div>
-        );
-      })()}
+        )}
 
-      {/* Lista de tickets */}
-      {loadingTickets ? (
-        <div className="text-center py-10 text-gray-400">
-          <p className="text-2xl animate-spin mb-2">⏳</p>
-          <p className="text-sm">Cargando tickets...</p>
-        </div>
-      ) : myTickets.length === 0 ? (
-        <div className="text-center py-10">
-          <p className="text-4xl mb-3">🎫</p>
-          <p className="text-white font-semibold">Aún no tienes tickets</p>
-          <p className="text-gray-400 text-sm">¡Haz tu primera apuesta!</p>
-          <button onClick={() => setView('list')}
-            className="mt-4 bg-teal-600 text-white px-6 py-2.5 rounded-xl font-semibold">
-            Ir a jugar
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {myTickets.map(ticket => {
-            const parts = ticket.drawId.split('-');
-            const timeStr = parts[parts.length - 1];
-            const timeFormatted = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
-            const gameName = ticket.drawGame === 'lotto' ? '🎰 Lotto' : '🐄 Granja';
-            return (
-              <div key={ticket.ticketId}
-                onClick={() => { setCurrentTicket(ticket); setView('ticket'); haptic('light'); }}
-                className={`rounded-2xl border p-4 cursor-pointer hover:opacity-90 transition ${
-                  ticket.status === 'won'  ? 'bg-green-500/10 border-green-500/30' :
-                  ticket.status === 'lost' ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10'
-                }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-bold text-white">{gameName} — {timeFormatted}</p>
-                    <p className="text-xs text-gray-500 font-mono">{ticket.ticketId}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                    ticket.status === 'won'  ? 'bg-green-500/20 text-green-400' :
-                    ticket.status === 'lost' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'
-                  }`}>
-                    {ticket.status === 'won' ? '🏆 Ganado' : ticket.status === 'lost' ? '❌ Perdido' : '⏳ Pendiente'}
-                  </span>
-                </div>
+        {/* Lista */}
+        {loadingTickets ? (
+          <div className="text-center py-8">
+            <p className="text-3xl animate-bounce">⏳</p>
+            <p className="text-white/50 text-sm mt-2">Cargando tickets...</p>
+          </div>
+        ) : myTickets.length === 0 ? (
+          <div className="text-center py-10 bg-white/3 rounded-2xl">
+            <p className="text-4xl mb-3">🎫</p>
+            <p className="text-white/70 font-semibold">Aún no tienes tickets</p>
+            <p className="text-white/40 text-sm mt-1">¡Haz tu primera apuesta!</p>
+            <button
+              onClick={() => { haptic('light'); setView('list'); }}
+              className="mt-4 bg-teal-500 text-white px-5 py-2.5 rounded-xl font-medium active:scale-95 transition-all"
+            >
+              Ir a jugar 🎰
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myTickets.map(ticket => {
+              const parts = ticket.drawId.split('-');
+              const timeStr = parts[parts.length - 1];
+              const timeFormatted = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
+              const gameName = ticket.drawGame === 'lotto' ? '🎰 Lotto' : '🐄 Granja';
 
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {ticket.bets.map((bet, i) => {
-                    const a = ANIMALS.find(x => x.name === bet.animal);
-                    return (
-                      <span key={i} className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-gray-300">
-                        {a?.emoji} {bet.animal} · {bet.amount}🥬
-                      </span>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-400">Total: {ticket.totalBet.toLocaleString()} 🥬</span>
-                  {ticket.status === 'won' && ticket.totalPrize && (
-                    <span className="text-green-400 font-bold">+{ticket.totalPrize.toLocaleString()} 🥬</span>
-                  )}
-                  {ticket.status === 'pending' && (
-                    <span className="text-gray-500">
-                      {new Date(ticket.createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
+              return (
+                <div
+                  key={ticket.ticketId}
+                  onClick={() => { haptic('light'); setCurrentTicket(ticket); setView('ticket'); }}
+                  className={`rounded-2xl border p-4 cursor-pointer hover:opacity-90 transition active:scale-[0.98] ${
+                    ticket.status === 'won'
+                      ? 'bg-green-500/10 border-green-500/30'
+                      : ticket.status === 'lost'
+                      ? 'bg-red-500/10 border-red-500/20'
+                      : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-white font-semibold text-sm">{gameName} — {timeFormatted}</p>
+                      <p className="text-white/40 text-xs font-mono">{ticket.ticketId}</p>
+                    </div>
+                    <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
+                      ticket.status === 'won'
+                        ? 'bg-green-500/20 text-green-400'
+                        : ticket.status === 'lost'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                      {ticket.status === 'won' ? '🏆 Ganado' : ticket.status === 'lost' ? '❌ Perdido' : '⏳ Pendiente'}
                     </span>
-                  )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {ticket.bets.map((bet, i) => {
+                      const a = ANIMALS.find(x => x.name === bet.animal);
+                      return (
+                        <span key={i} className="bg-white/8 text-white/60 text-[10px] px-2 py-1 rounded-lg">
+                          {a?.emoji} {bet.animal} · {bet.amount}🥬
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/50 text-xs">
+                      Total: {ticket.totalBet.toLocaleString()} 🥬
+                    </span>
+                    {ticket.status === 'won' && ticket.totalPrize && (
+                      <span className="text-green-400 font-bold text-sm">
+                        +{ticket.totalPrize.toLocaleString()} 🥬
+                      </span>
+                    )}
+                    {ticket.status === 'pending' && (
+                      <span className="text-white/30 text-xs">
+                        {new Date(ticket.createdAt).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return null;
+}
+
+// ── Sub-componente: cuenta regresiva en línea ─────────────────
+function DrawCloseCountdown({ closeTime }: { closeTime: string }) {
+  const remaining = useCountdown(closeTime);
+  return <>{remaining}</>;
 }
