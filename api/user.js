@@ -8,15 +8,15 @@ export default async function handler(req, res) {
 
     try {
         await client.connect();
-        const db = client.db('animalito_db'); // Clúster Zing
+        const db = client.db('animalito_db');
         const users = db.collection('users');
         const withdrawals = db.collection('withdrawals');
 
         const { telegramId, username, withdrawAmount } = req.body;
 
-        if (!telegramId) return res.status(400).json({ error: 'Falta telegramId' });
+        if (!telegramId) return res.status(400).json({ error: 'Falta ID' });
 
-        // ESCENARIO: PROCESAR RETIRO
+        // LÓGICA DE RETIRO
         if (withdrawAmount) {
             const lechugasADescontar = withdrawAmount * 10000;
             const user = await users.findOne({ telegramId: telegramId.toString() });
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
             await withdrawals.insertOne({
                 telegramId,
-                username,
+                username: username || "Usuario",
                 amountTON: withdrawAmount,
                 status: 'pendiente',
                 date: new Date()
@@ -38,8 +38,8 @@ export default async function handler(req, res) {
                 { $inc: { coins: -lechugasADescontar } }
             );
 
-            // NOTIFICACIÓN AL BOT DE JAVIER
-            const mensaje = `🔔 *SOLICITUD DE RETIRO*\n\n👤 @${username || 'Usuario'}\n💰 ${withdrawAmount} TON\n📉 -${lechugasADescontar} 🥬`;
+            // NOTIFICACIÓN A JAVIER
+            const mensaje = `🔔 *RETIRO SOLICITADO*\n\n👤 @${username || 'Usuario'}\n💰 ${withdrawAmount} TON\n📉 -${lechugasADescontar} 🥬`;
             await fetch(`https://api.telegram.org/bot${process.env.TOKEN_BOT}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, newBalance: user.coins - lechugasADescontar });
         }
 
-        // CARGA NORMAL DE USUARIO
+        // CARGA O REGISTRO INICIAL
         const userDoc = await users.findOneAndUpdate(
             { telegramId: telegramId.toString() },
             { $setOnInsert: { coins: 1000, username: username || "Usuario" } },
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         );
 
         res.status(200).json(userDoc);
-    } catch (error) {
-        res.status(500).json({ error: 'Error de servidor' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 }
