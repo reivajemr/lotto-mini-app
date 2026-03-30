@@ -21,8 +21,8 @@
     "Api/scraper.mjs": { "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/api/user",    "destination": "/Api/user.mjs" },
-    { "source": "/api/scraper", "destination": "/Api/scraper.mjs" },
+    { "source": "/api/user",    "destination": "/api/user.mjs" },
+    { "source": "/api/scraper", "destination": "/api/scraper.mjs" },
     { "source": "/(.*)",        "destination": "/index.html" }
   ]
 }
