@@ -291,23 +291,28 @@ export default function Lobby({ balance, onBalanceChange, showAlert, haptic, tel
         </div>
       )}
 
-      {/* Animals Grid */}
-      <div className="grid grid-cols-4 gap-2">
-        {ANIMALS.map((animal) => (
-          <button
-            key={animal.number}
-            onClick={() => handleSelectAnimal(animal)}
-            className={`flex flex-col items-center rounded-xl border p-2 transition-all active:scale-95 ${
-              selectedAnimal?.number === animal.number
-                ? 'border-[#0088cc] bg-[#0088cc]/20 shadow-lg shadow-[#0088cc]/20'
-                : 'border-white/5 bg-[rgba(45,45,45,0.6)] hover:border-white/20'
-            }`}
-          >
-            <span className="text-xl">{animal.emoji}</span>
-            <span className="mt-0.5 text-[10px] font-medium text-gray-300">{animal.name}</span>
-            <span className="text-[9px] text-gray-500">{animal.number}</span>
-          </button>
-        ))}
+      {/* Animals Grid — scrollable */}
+      <div>
+        <p className="mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+          🐾 Elige tu animalito ({ANIMALS.length})
+        </p>
+        <div className="grid grid-cols-4 gap-2 pb-4">
+          {ANIMALS.map((animal) => (
+            <button
+              key={animal.number}
+              onClick={() => handleSelectAnimal(animal)}
+              className={`flex flex-col items-center rounded-xl border p-2 transition-all active:scale-95 ${
+                selectedAnimal?.number === animal.number
+                  ? 'border-[#0088cc] bg-[#0088cc]/20 shadow-lg shadow-[#0088cc]/20'
+                  : 'border-white/5 bg-[rgba(45,45,45,0.6)] hover:border-white/20'
+              }`}
+            >
+              <span className="text-2xl">{animal.emoji}</span>
+              <span className="mt-0.5 text-[10px] font-medium text-gray-300 text-center leading-tight">{animal.name}</span>
+              <span className="text-[9px] text-gray-500">#{animal.number}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
