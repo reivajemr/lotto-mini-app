@@ -74,7 +74,7 @@ async function initPurchase(lechugas, ton) {
     const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 60,
         messages: [{
-            address: "TU_DIRECCION_AQUI", // REEMPLAZAR
+            address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", // REEMPLAZAR
             amount: (ton * 1000000000).toString()
         }]
     };
