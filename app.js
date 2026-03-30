@@ -143,6 +143,9 @@ window.switchWalletTab = function(tab) {
     }
 };
 
+// ============================================
+// COMPRA DE LECHUGAS
+// ============================================
 window.initPurchase = async function(lechugas, ton) {
     console.log("🛒 Iniciando compra:", lechugas, "lechugas por", ton, "TON");
 
@@ -156,27 +159,67 @@ window.initPurchase = async function(lechugas, ton) {
         return;
     }
 
+    const walletAddress = tonConnectUI.account.address;
+    const user = tg.initDataUnsafe.user;
+
+    // Crear transacción
     const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600, // 10 minutos
         messages: [
             {
                 address: MI_BILLETERA_RECEPTORA,
                 amount: (ton * 1e9).toString(), // Convertir a nanoTON
-                payload: undefined // Puedes agregar payload si quieres
+                payload: undefined
             }
         ]
     };
 
     try {
+        // Enviar transacción
         const result = await tonConnectUI.sendTransaction(transaction);
         console.log("✅ Transacción enviada:", result);
-        tg.showAlert("✅ Pago enviado. Lechugas serán acreditadas en segundos.");
+
+        // Extraer hash si está disponible
+        const transactionHash = result?.boc || result?.hash || "hash_pendiente";
+
+        // Registrar compra en el backend
+        const res = await fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telegramId: user.id.toString(),
+                username: user.username,
+                action: 'purchase',
+                purchaseAmount: lechugas,
+                purchasePrice: ton,
+                walletAddress: walletAddress,
+                transactionHash: transactionHash
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            // Actualizar balance en UI
+            if (data.newBalance !== undefined) {
+                document.getElementById('balance').innerText = data.newBalance;
+            }
+            tg.showAlert(`✅ ${lechugas} 🥬 añadidas a tu cuenta!\nNuevo balance: ${data.newBalance}`);
+            console.log("✅ Compra registrada en backend");
+        } else {
+            const error = await res.json();
+            console.error("❌ Error al registrar compra:", error);
+            tg.showAlert(`⚠️ Pago completado pero error al registrar: ${error.error}`);
+        }
+
     } catch (error) {
         console.error("❌ Error en transacción:", error);
         tg.showAlert("❌ Transacción cancelada o error: " + error.message);
     }
 };
 
+// ============================================
+// RETIRO DE GANANCIAS
+// ============================================
 window.requestWithdraw = async function() {
     console.log("💸 Iniciando retiro...");
 
@@ -191,40 +234,42 @@ window.requestWithdraw = async function() {
     }
 
     const tonAmount = parseFloat(document.getElementById('withdraw-ton').value);
-    const balanceEl = document.getElementById('balance');
-    
+    const walletAddress = tonConnectUI.account.address;
+    const user = tg.initDataUnsafe.user;
+
+    // Validar monto
     if (isNaN(tonAmount) || tonAmount < 5 || tonAmount > 20) {
         tg.showAlert("⚠️ Monto inválido. Debe estar entre 5 y 20 TON.");
         return;
     }
 
-    tg.showConfirm(`¿Retirar ${tonAmount} TON a ${tonConnectUI.account.address.slice(0, 10)}...?`, async (ok) => {
-        if (ok) {
-            const user = tg.initDataUnsafe.user;
-            if (!user) {
-                tg.showAlert("❌ No se pudo obtener datos del usuario.");
-                return;
-            }
+    // Confirmar retiro
+    tg.showConfirm(
+        `¿Retirar ${tonAmount} TON a ${walletAddress.slice(0, 10)}...?`,
+        async (ok) => {
+            if (!ok) return;
 
             try {
                 const res = await fetch('/api/user', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         telegramId: user.id.toString(),
-                        withdrawAmount: tonAmount,
                         username: user.username,
-                        walletAddress: tonConnectUI.account.address
+                        action: 'withdraw',
+                        withdrawAmount: tonAmount,
+                        walletAddress: walletAddress
                     })
                 });
 
                 if (res.ok) {
                     const data = await res.json();
                     if (data.newBalance !== undefined) {
-                        balanceEl.innerText = data.newBalance;
+                        document.getElementById('balance').innerText = data.newBalance;
                     }
                     document.getElementById('withdraw-ton').value = '';
-                    tg.showAlert("✅ Solicitud de retiro enviada. Se procesará en 24-48 horas.");
+                    tg.showAlert("✅ Retiro solicitado. Javier lo verificará en 24-48 horas.");
+                    console.log("✅ Retiro registrado:", data);
                 } else {
                     const err = await res.json();
                     tg.showAlert(`❌ ${err.error || 'Error desconocido'}`);
@@ -234,7 +279,7 @@ window.requestWithdraw = async function() {
                 tg.showAlert("❌ Error en la solicitud: " + error.message);
             }
         }
-    });
+    );
 };
 
 // --- 4. FUNCIONES UTILITARIAS ---
@@ -280,15 +325,15 @@ async function cargarDatosUsuario() {
         const res = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                telegramId: user.id.toString(), 
-                username: user.username 
+            body: JSON.stringify({
+                telegramId: user.id.toString(),
+                username: user.username
             })
         });
 
         if (res.ok) {
             const data = await res.json();
-            const coins = data.coins || data.value?.coins || 0;
+            const coins = data.user?.coins || data.coins || 0;
             if (document.getElementById('balance')) {
                 document.getElementById('balance').innerText = coins;
             }
@@ -304,7 +349,7 @@ async function cargarDatosUsuario() {
 // --- 5. INICIALIZACIÓN PRINCIPAL ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("🚀 Iniciando Lotto Mini App...");
+    console.log("🚀 Iniciando Lotto Mini App v2...");
     cargarDatosUsuario();
     showSection('lobby');
 });
