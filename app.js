@@ -2,8 +2,9 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 let tonConnectUI;
+const MI_WALLET = "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo";
 
-// Inicialización con reintento para evitar errores de carga
+// Inicialización de Wallet con reintento
 function initTonConnect() {
     if (typeof TON_CONNECT_UI !== 'undefined') {
         tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -11,7 +12,26 @@ function initTonConnect() {
             buttonRootId: 'connect-wallet-btn-inner'
         });
     } else {
-        setTimeout(initTonConnect, 500); // Reintenta si el script externo aún no baja
+        setTimeout(initTonConnect, 500);
+    }
+}
+
+// Navegación entre pestañas de Wallet
+function switchWalletTab(tab) {
+    const depositContent = document.getElementById('deposit-content');
+    const withdrawContent = document.getElementById('withdraw-content');
+    const btns = document.querySelectorAll('.tab-btn');
+
+    if (tab === 'deposit') {
+        depositContent.style.display = 'block';
+        withdrawContent.style.display = 'none';
+        btns[0].classList.add('active');
+        btns[1].classList.remove('active');
+    } else {
+        depositContent.style.display = 'none';
+        withdrawContent.style.display = 'block';
+        btns[0].classList.remove('active');
+        btns[1].classList.add('active');
     }
 }
 
@@ -27,6 +47,62 @@ async function showSection(sectionId) {
     } catch (e) { console.error(e); }
 }
 
+// PROCESAR COMPRA REAL
+async function initPurchase(lechugas, ton) {
+    if (!tonConnectUI || !tonConnectUI.connected) {
+        tg.showAlert("⚠️ Conecta tu Wallet primero.");
+        return;
+    }
+
+    const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{
+            address: MI_WALLET,
+            amount: (ton * 1000000000).toString()
+        }]
+    };
+
+    try {
+        await tonConnectUI.sendTransaction(transaction);
+        tg.showAlert("✅ Pago enviado. Procesando tus lechugas...");
+    } catch (e) {
+        tg.showAlert("❌ Pago cancelado.");
+    }
+}
+
+// PROCESAR RETIRO
+async function requestWithdraw() {
+    const tonAmount = parseFloat(document.getElementById('withdraw-ton').value);
+    const balanceEl = document.getElementById('balance');
+    
+    if (isNaN(tonAmount) || tonAmount < 5 || tonAmount > 20) {
+        tg.showAlert("Monto inválido (mín 5, máx 20 TON).");
+        return;
+    }
+
+    tg.showConfirm(`¿Retirar ${tonAmount} TON?`, async (ok) => {
+        if (ok) {
+            const user = tg.initDataUnsafe.user;
+            const res = await fetch('/api/user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    telegramId: user.id.toString(),
+                    withdrawAmount: tonAmount,
+                    username: user.username
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                balanceEl.innerText = data.newBalance; // Actualización inmediata
+                tg.showAlert("✅ Solicitud enviada con éxito.");
+            }
+        }
+    });
+}
+
+// Cargar Avatar y Saldo
 async function cargarDatosUsuario() {
     const user = tg.initDataUnsafe.user;
     if (!user) return;
@@ -35,7 +111,6 @@ async function cargarDatosUsuario() {
     const photoEl = document.getElementById('user-photo');
     const initialsEl = document.getElementById('user-initials');
 
-    // Lógica de Avatar Segura
     if (user.photo_url) {
         photoEl.src = user.photo_url;
         photoEl.onload = () => {
@@ -64,54 +139,6 @@ function mostrarIniciales(user, img, div) {
         div.style.display = 'flex';
         div.innerText = (user.first_name || "U").charAt(0).toUpperCase();
     }
-}
-
-async function initPurchase(lechugas, ton) {
-    if (!tonConnectUI || !tonConnectUI.connected) {
-        tg.showAlert("❌ Conecta tu Wallet primero.");
-        return;
-    }
-    const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 60,
-        messages: [{
-            address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", // REEMPLAZAR
-            amount: (ton * 1000000000).toString()
-        }]
-    };
-    try {
-        await tonConnectUI.sendTransaction(transaction);
-        tg.showAlert("Pago enviado.");
-    } catch (e) { tg.showAlert("Cancelado."); }
-}
-
-async function requestWithdraw() {
-    const tonAmount = parseFloat(document.getElementById('withdraw-ton').value);
-    const balanceEl = document.getElementById('balance');
-    
-    if (tonAmount < 5 || tonAmount > 20 || isNaN(tonAmount)) {
-        tg.showAlert("Monto entre 5 y 20 TON.");
-        return;
-    }
-
-    tg.showConfirm(`¿Retirar ${tonAmount} TON?`, async (ok) => {
-        if (ok) {
-            const user = tg.initDataUnsafe.user;
-            const res = await fetch('/api/user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    telegramId: user.id.toString(),
-                    withdrawAmount: tonAmount,
-                    username: user.username
-                })
-            });
-            if (res.ok) {
-                const data = await res.json();
-                balanceEl.innerText = data.newBalance; // Cambio visual inmediato
-                tg.showAlert("✅ Solicitud enviada.");
-            }
-        }
-    });
 }
 
 function actualizarMenuVisual(sectionId) {
