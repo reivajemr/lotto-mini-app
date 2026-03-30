@@ -3,8 +3,6 @@ import { MongoClient } from 'mongodb';
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
-const MANIFEST_URL = 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json';
-
 export default async function handler(req, res) {
     // Permitir CORS
     if (req.method === 'OPTIONS') {
@@ -27,12 +25,20 @@ export default async function handler(req, res) {
         const { 
             telegramId, 
             username, 
-            action,           // 'deposit', 'withdraw', 'purchase'
-            purchaseAmount,   // lechugas a comprar
-            purchasePrice,    // TON a pagar
-            withdrawAmount,   // TON a retirar
+            action,
+            purchaseAmount,
+            purchasePrice,
+            withdrawAmount,
             walletAddress,
-            transactionHash   // hash de la transacción TON
+            transactionHash,
+            // Campos de apuesta
+            sorteo,
+            animalSelected,
+            animalResult,
+            betAmount,
+            won,
+            prize,
+            newBalance
         } = req.body;
 
         if (!telegramId) {
@@ -49,8 +55,11 @@ export default async function handler(req, res) {
             const newUser = {
                 telegramId: userIdStr,
                 username: username || "Usuario",
-                coins: 1000, // 1000 lechugas iniciales
+                coins: 1000,
                 tonBalance: 0,
+                totalBets: 0,
+                totalWins: 0,
+                totalLost: 0,
                 createdAt: new Date(),
                 lastActive: new Date()
             };
@@ -67,7 +76,83 @@ export default async function handler(req, res) {
         );
 
         // ============================================
-        // 2. PROCESAR ACCIÓN: COMPRA DE LECHUGAS
+        // 2. ACCIÓN: APUESTA (BET)
+        // ============================================
+        if (action === 'bet') {
+            console.log("🎲 Procesar apuesta:", {
+                userId: userIdStr,
+                sorteo,
+                animalSelected,
+                animalResult,
+                betAmount,
+                won,
+                prize
+            });
+
+            // Guardar transacción de apuesta
+            await transactions.insertOne({
+                telegramId: userIdStr,
+                username: username || "Usuario",
+                type: 'bet',
+                sorteo: sorteo || 'N/A',
+                animalSelected: animalSelected || 'N/A',
+                animalResult: animalResult || 'N/A',
+                betAmount: betAmount || 0,
+                won: won || false,
+                prize: won ? (prize || betAmount * 35) : 0,
+                status: 'completada',
+                date: new Date(),
+                timestamp: Date.now()
+            });
+
+            // Actualizar balance del usuario
+            const updatedUser = await users.findOneAndUpdate(
+                { telegramId: userIdStr },
+                { 
+                    $set: { 
+                        coins: newBalance,
+                        lastActive: new Date()
+                    },
+                    $inc: {
+                        totalBets: 1,
+                        totalWins: won ? 1 : 0,
+                        totalLost: won ? 0 : 1
+                    }
+                },
+                { returnDocument: 'after' }
+            );
+
+            console.log("✅ Apuesta guardada. Balance:", newBalance);
+
+            // Notificación solo si GANA (para no spamear)
+            if (won) {
+                const mensajeGanador = `
+🎉 *¡GANADOR!*
+
+👤 @${username || 'Usuario'} (ID: ${userIdStr})
+🎰 Sorteo: ${sorteo}
+🐾 Eligió: ${animalSelected}
+✅ Salió: ${animalResult}
+💰 Apostó: ${betAmount} 🥬
+🏆 Ganó: ${prize || betAmount * 35} 🥬
+💾 Balance: ${newBalance} 🥬
+
+⏰ ${new Date().toLocaleString('es-VE')}
+                `.trim();
+
+                await enviarNotificacionTelegram(mensajeGanador);
+            }
+
+            return res.status(200).json({
+                success: true,
+                type: 'bet',
+                newBalance: updatedUser?.coins || newBalance,
+                message: won ? '🎉 ¡Ganaste!' : '😔 Sigue intentando'
+            });
+        }
+
+        // ============================================
+        // 3. ACCIÓN: COMPRA DE LECHUGAS
         // ============================================
         if (action === 'purchase' || (purchaseAmount && purchasePrice)) {
             console.log("🛒 Procesar compra:", {
@@ -83,7 +168,6 @@ export default async function handler(req, res) {
                 });
             }
 
-            // Guardar transacción de compra
             await transactions.insertOne({
                 telegramId: userIdStr,
                 username: username || "Usuario",
@@ -97,7 +181,6 @@ export default async function handler(req, res) {
                 timestamp: Date.now()
             });
 
-            // Sumar lechugas al balance
             const updatedUser = await users.findOneAndUpdate(
                 { telegramId: userIdStr },
                 { 
@@ -107,9 +190,8 @@ export default async function handler(req, res) {
                 { returnDocument: 'after' }
             );
 
-            console.log("✅ Compra procesada. Nuevo balance:", updatedUser.value.coins);
+            console.log("✅ Compra procesada. Nuevo balance:", updatedUser.coins);
 
-            // NOTIFICACIÓN AL BOT (COMPRA)
             const mensajeCompra = `
 🛍️ *NUEVA COMPRA*
 
@@ -118,7 +200,7 @@ export default async function handler(req, res) {
 💵 Pagó ${purchasePrice} TON
 🔗 Hash: \`${transactionHash || 'N/A'}\`
 💳 Wallet: \`${walletAddress || 'No registrada'}\`
-📊 Balance nuevo: ${updatedUser.value.coins} 🥬
+📊 Balance nuevo: ${updatedUser.coins} 🥬
 
 ✅ *Estado: COMPLETADA*
 ⏰ ${new Date().toLocaleString('es-VE')}
@@ -129,13 +211,13 @@ export default async function handler(req, res) {
             return res.status(200).json({
                 success: true,
                 type: 'purchase',
-                newBalance: updatedUser.value.coins,
+                newBalance: updatedUser.coins,
                 message: `✅ ${purchaseAmount} lechugas agregadas a tu cuenta`
             });
         }
 
         // ============================================
-        // 3. PROCESAR ACCIÓN: RETIRO DE GANANCIAS
+        // 4. ACCIÓN: RETIRO DE GANANCIAS
         // ============================================
         if (action === 'withdraw' || withdrawAmount) {
             console.log("💸 Procesar retiro:", {
@@ -154,17 +236,14 @@ export default async function handler(req, res) {
                 });
             }
 
-            // Convertir TON a lechugas (1 TON = 10,000 lechugas)
             const lechugasADescontar = withdrawAmount * 10000;
 
-            // Verificar que tenga suficiente saldo
             if (user.coins < lechugasADescontar) {
                 return res.status(400).json({ 
                     error: `Saldo insuficiente. Tienes ${user.coins} 🥬, necesitas ${lechugasADescontar} 🥬` 
                 });
             }
 
-            // Crear transacción de retiro (PENDIENTE hasta que Javier la verifique)
             await transactions.insertOne({
                 telegramId: userIdStr,
                 username: username || "Usuario",
@@ -178,7 +257,6 @@ export default async function handler(req, res) {
                 timestamp: Date.now()
             });
 
-            // Restar lechugas del balance
             const updatedUser = await users.findOneAndUpdate(
                 { telegramId: userIdStr },
                 { 
@@ -188,9 +266,8 @@ export default async function handler(req, res) {
                 { returnDocument: 'after' }
             );
 
-            console.log("✅ Retiro creado. Nuevo balance:", updatedUser.value.coins);
+            console.log("✅ Retiro creado. Nuevo balance:", updatedUser.coins);
 
-            // NOTIFICACIÓN AL BOT (RETIRO PENDIENTE)
             const mensajeRetiro = `
 🚀 *SOLICITUD DE RETIRO (PENDIENTE)*
 
@@ -198,7 +275,7 @@ export default async function handler(req, res) {
 💰 ${withdrawAmount} TON
 🏦 Wallet: \`${walletAddress}\`
 📉 -${lechugasADescontar} 🥬
-💾 Balance restante: ${updatedUser.value.coins} 🥬
+💾 Balance restante: ${updatedUser.coins} 🥬
 
 ⏱️ *Estado: PENDIENTE DE VERIFICACIÓN*
 ⏰ ${new Date().toLocaleString('es-VE')}
@@ -212,70 +289,57 @@ https://tonscan.org/address/${walletAddress}
             return res.status(200).json({
                 success: true,
                 type: 'withdraw',
-                newBalance: updatedUser.value.coins,
+                newBalance: updatedUser.coins,
                 message: `✅ Retiro de ${withdrawAmount} TON solicitado. Pendiente de verificación.`
             });
         }
 
         // ============================================
-        // 4. SI NO HAY ACCIÓN ESPECÍFICA: CARGAR DATOS
+        // 5. SIN ACCIÓN: CARGAR DATOS DEL USUARIO
         // ============================================
         return res.status(200).json({
             success: true,
             user: {
                 telegramId: user.telegramId,
                 username: user.username,
-                coins: user.coins,
+                coins: user.coins || 0,
                 tonBalance: user.tonBalance || 0,
+                totalBets: user.totalBets || 0,
+                totalWins: user.totalWins || 0,
                 createdAt: user.createdAt,
                 lastActive: user.lastActive
             }
         });
 
     } catch (error) {
-        console.error("❌ Error en API:", error.message);
-        return res.status(500).json({ 
-            error: error.message,
-            type: 'server_error'
-        });
-    } finally {
-        await client.close();
+        console.error("❌ Error en /api/user:", error);
+        return res.status(500).json({ error: "Error interno del servidor" });
     }
 }
 
 // ============================================
-// FUNCIÓN: ENVIAR NOTIFICACIÓN A TELEGRAM
+// FUNCIÓN: NOTIFICACIÓN POR TELEGRAM
 // ============================================
 async function enviarNotificacionTelegram(mensaje) {
     const TOKEN = process.env.TOKEN_BOT;
     const CHAT_ID = process.env.ID_DE_CHAT;
 
     if (!TOKEN || !CHAT_ID) {
-        console.warn("⚠️ TOKEN_BOT o ID_DE_CHAT no configurados");
+        console.log("⚠️ TOKEN_BOT o ID_DE_CHAT no configurados");
         return;
     }
 
     try {
-        const response = await fetch(
-            `https://api.telegram.org/bot${TOKEN}/sendMessage`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: CHAT_ID,
-                    text: mensaje,
-                    parse_mode: 'Markdown'
-                })
-            }
-        );
-
-        if (!response.ok) {
-            console.error("❌ Error enviando notificación:", response.status);
-            return;
-        }
-
-        console.log("✅ Notificación enviada a Telegram");
+        await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: mensaje,
+                parse_mode: 'Markdown'
+            })
+        });
     } catch (error) {
-        console.error("❌ Error con Telegram API:", error);
+        console.error("❌ Error enviando notificación:", error);
     }
 }
