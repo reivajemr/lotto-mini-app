@@ -3,7 +3,7 @@ tg.expand();
 
 let tonConnectUI;
 
-// Inicialización segura de TonConnect
+// Inicialización con reintento para evitar errores de carga
 function initTonConnect() {
     if (typeof TON_CONNECT_UI !== 'undefined') {
         tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -11,7 +11,7 @@ function initTonConnect() {
             buttonRootId: 'connect-wallet-btn-inner'
         });
     } else {
-        console.error("TonConnect SDK no cargado aún.");
+        setTimeout(initTonConnect, 500); // Reintenta si el script externo aún no baja
     }
 }
 
@@ -22,39 +22,74 @@ async function showSection(sectionId) {
         const html = await response.text();
         mainContent.innerHTML = html;
 
-        if (sectionId === 'wallet' && !tonConnectUI) initTonConnect();
+        if (sectionId === 'wallet') initTonConnect();
         actualizarMenuVisual(sectionId);
-    } catch (e) { console.error("Error cargando sección", e); }
+    } catch (e) { console.error(e); }
 }
 
-// COMPRA CON TON
-async function initPurchase(lechugas, ton) {
-    if (!tonConnectUI || !tonConnectUI.connected) {
-        tg.showAlert("❌ Conecta tu wallet primero.");
-        return;
+async function cargarDatosUsuario() {
+    const user = tg.initDataUnsafe.user;
+    if (!user) return;
+
+    document.getElementById('user-name').innerText = user.first_name;
+    const photoEl = document.getElementById('user-photo');
+    const initialsEl = document.getElementById('user-initials');
+
+    // Lógica de Avatar Segura
+    if (user.photo_url) {
+        photoEl.src = user.photo_url;
+        photoEl.onload = () => {
+            photoEl.style.display = 'block';
+            if(initialsEl) initialsEl.style.display = 'none';
+        };
+        photoEl.onerror = () => mostrarIniciales(user, photoEl, initialsEl);
+    } else {
+        mostrarIniciales(user, photoEl, initialsEl);
     }
 
+    try {
+        const res = await fetch('/api/user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegramId: user.id.toString(), username: user.username })
+        });
+        const data = await res.json();
+        if (data.coins !== undefined) document.getElementById('balance').innerText = data.coins;
+    } catch (e) { console.error("Error API"); }
+}
+
+function mostrarIniciales(user, img, div) {
+    img.style.display = 'none';
+    if(div) {
+        div.style.display = 'flex';
+        div.innerText = (user.first_name || "U").charAt(0).toUpperCase();
+    }
+}
+
+async function initPurchase(lechugas, ton) {
+    if (!tonConnectUI || !tonConnectUI.connected) {
+        tg.showAlert("❌ Conecta tu Wallet primero.");
+        return;
+    }
     const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 60,
         messages: [{
-            address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", // REEMPLAZAR
+            address: "TU_DIRECCION_AQUI", // REEMPLAZAR
             amount: (ton * 1000000000).toString()
         }]
     };
-
     try {
         await tonConnectUI.sendTransaction(transaction);
-        tg.showAlert("¡Pago enviado!");
-    } catch (e) { tg.showAlert("Pago cancelado."); }
+        tg.showAlert("Pago enviado.");
+    } catch (e) { tg.showAlert("Cancelado."); }
 }
 
-// RETIRO CON DESCUENTO INMEDIATO
 async function requestWithdraw() {
     const tonAmount = parseFloat(document.getElementById('withdraw-ton').value);
     const balanceEl = document.getElementById('balance');
     
     if (tonAmount < 5 || tonAmount > 20 || isNaN(tonAmount)) {
-        tg.showAlert("El monto debe estar entre 5 y 20 TON.");
+        tg.showAlert("Monto entre 5 y 20 TON.");
         return;
     }
 
@@ -67,14 +102,13 @@ async function requestWithdraw() {
                 body: JSON.stringify({ 
                     telegramId: user.id.toString(),
                     withdrawAmount: tonAmount,
-                    username: user.username || user.first_name
+                    username: user.username
                 })
             });
-
             if (res.ok) {
                 const data = await res.json();
-                balanceEl.innerText = data.newBalance; // Actualiza sin recargar
-                tg.showAlert("✅ Solicitud enviada con éxito.");
+                balanceEl.innerText = data.newBalance; // Cambio visual inmediato
+                tg.showAlert("✅ Solicitud enviada.");
             }
         }
     });
@@ -85,21 +119,6 @@ function actualizarMenuVisual(sectionId) {
         item.classList.remove('active');
         if (item.getAttribute('onclick').includes(sectionId)) item.classList.add('active');
     });
-}
-
-async function cargarDatosUsuario() {
-    const user = tg.initDataUnsafe.user;
-    if (!user) return;
-
-    try {
-        const res = await fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id.toString(), username: user.username })
-        });
-        const data = await res.json();
-        if (data.coins !== undefined) document.getElementById('balance').innerText = data.coins;
-    } catch (e) { console.error("Error cargando usuario"); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
