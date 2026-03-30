@@ -4,6 +4,9 @@ tg.expand();
 let tonConnectUI;
 const MI_BILLETERA_RECEPTORA = "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo";
 
+// --- CONFIGURACIÓN DEL MANIFEST ---
+const MANIFEST_URL = 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json';
+
 // --- 1. GESTIÓN DE SECCIONES ---
 
 async function showSection(sectionId) {
@@ -13,41 +16,108 @@ async function showSection(sectionId) {
         const html = await response.text();
         mainContent.innerHTML = html;
 
-        // CORRECCIÓN: Siempre intentamos inicializar al entrar a wallet
+        // Inicializar TonConnect cuando llegues a wallet
         if (sectionId === 'wallet') {
-            // Damos un respiro al DOM para que renderice el nuevo HTML
             setTimeout(() => {
                 initTonConnect();
-            }, 100); 
+            }, 200);
         }
         actualizarMenuVisual(sectionId);
     } catch (e) {
         console.error("Error al cargar la sección:", e);
+        mainContent.innerHTML = `<div class="error-message">❌ Error cargando sección</div>`;
     }
 }
 
-// --- 2. LÓGICA DE TONCONNECT ---
+// --- 2. INICIALIZACIÓN ROBUSTA DE TONCONNECT ---
 
-function initTonConnect() {
+async function initTonConnect() {
     const container = document.getElementById('ton-connect-button-container');
     
-    if (container && typeof TON_CONNECT_UI !== 'undefined') {
-        // Si ya existe una instancia previa, debemos "limpiarla" o simplemente reasignar el root
-        // para que vuelva a inyectar el botón en el nuevo contenedor
-        if (!tonConnectUI) {
-            tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-                manifestUrl: 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json',
-                buttonRootId: 'ton-connect-button-container'
-            });
-        } else {
-            // Forzamos al SDK a mirar el nuevo contenedor del DOM
-            tonConnectUI.uiOptions = {
-                buttonRootId: 'ton-connect-button-container'
-            };
-        }
-    } else {
-        // Si el contenedor aún no aparece, reintentamos brevemente
+    if (!container) {
+        console.warn("⚠️ Contenedor no encontrado. Reintentando...");
         setTimeout(initTonConnect, 300);
+        return;
+    }
+
+    // Limpiar instancia anterior si existe
+    if (tonConnectUI) {
+        console.log("🔄 TonConnect ya existe, reutilizando...");
+        return;
+    }
+
+    // Esperar a que TON_CONNECT_UI esté disponible
+    if (typeof TON_CONNECT_UI === 'undefined') {
+        console.warn("⚠️ TON_CONNECT_UI no cargado. Reintentando en 500ms...");
+        setTimeout(initTonConnect, 500);
+        return;
+    }
+
+    try {
+        tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+            manifestUrl: MANIFEST_URL,
+            buttonRootId: 'ton-connect-button-container'
+        });
+
+        console.log("✅ TonConnect inicializado exitosamente");
+
+        // Escuchar cambios de wallet
+        tonConnectUI.onStatusChange((wallet) => {
+            if (wallet) {
+                console.log("✅ Wallet conectada:", wallet.account.address);
+                mostrarWalletConectada(wallet.account.address);
+            } else {
+                console.log("❌ Wallet desconectada");
+                limpiarWalletConectada();
+            }
+        });
+
+        // Si ya hay un wallet conectado, lo mostramos
+        if (tonConnectUI.account) {
+            console.log("✅ Wallet ya estaba conectada:", tonConnectUI.account.address);
+            mostrarWalletConectada(tonConnectUI.account.address);
+        }
+
+    } catch (error) {
+        console.error("❌ Error inicializando TonConnect:", error);
+        mostrarErrorTonConnect(error.message);
+    }
+}
+
+function mostrarWalletConectada(address) {
+    const container = document.getElementById('ton-connect-button-container');
+    if (container) {
+        const shortAddr = address.slice(0, 6) + "..." + address.slice(-6);
+        const statusEl = document.getElementById('wallet-status');
+        if (statusEl) {
+            statusEl.innerHTML = `✅ Conectada: <code>${shortAddr}</code>`;
+            statusEl.style.display = 'block';
+        }
+    }
+}
+
+function limpiarWalletConectada() {
+    const statusEl = document.getElementById('wallet-status');
+    if (statusEl) {
+        statusEl.style.display = 'none';
+    }
+}
+
+function mostrarErrorTonConnect(error) {
+    const container = document.getElementById('ton-connect-button-container');
+    if (container) {
+        container.innerHTML = `
+            <div style="background: rgba(255, 107, 107, 0.2); 
+                        border: 1px solid rgba(255, 107, 107, 0.5);
+                        padding: 12px;
+                        border-radius: 8px;
+                        text-align: center;
+                        font-size: 13px;
+                        color: #ff6b6b;">
+                ❌ Error al cargar TonConnect<br>
+                <small>${error}</small>
+            </div>
+        `;
     }
 }
 
@@ -74,29 +144,48 @@ window.switchWalletTab = function(tab) {
 };
 
 window.initPurchase = async function(lechugas, ton) {
-    if (!tonConnectUI || !tonConnectUI.account) {
+    console.log("🛒 Iniciando compra:", lechugas, "lechugas por", ton, "TON");
+
+    if (!tonConnectUI) {
+        tg.showAlert("❌ TonConnect no está inicializado.");
+        return;
+    }
+
+    if (!tonConnectUI.account) {
         tg.showAlert("❌ Conecta tu Wallet primero.");
         return;
     }
 
     const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 60,
-        messages: [{
-            address: MI_BILLETERA_RECEPTORA,
-            amount: (ton * 1000000000).toString()
-        }]
+        validUntil: Math.floor(Date.now() / 1000) + 600, // 10 minutos
+        messages: [
+            {
+                address: MI_BILLETERA_RECEPTORA,
+                amount: (ton * 1e9).toString(), // Convertir a nanoTON
+                payload: undefined // Puedes agregar payload si quieres
+            }
+        ]
     };
 
     try {
-        await tonConnectUI.sendTransaction(transaction);
-        tg.showAlert("✅ Pago enviado.");
-    } catch (e) {
-        tg.showAlert("❌ Pago cancelado.");
+        const result = await tonConnectUI.sendTransaction(transaction);
+        console.log("✅ Transacción enviada:", result);
+        tg.showAlert("✅ Pago enviado. Lechugas serán acreditadas en segundos.");
+    } catch (error) {
+        console.error("❌ Error en transacción:", error);
+        tg.showAlert("❌ Transacción cancelada o error: " + error.message);
     }
 };
 
 window.requestWithdraw = async function() {
-    if (!tonConnectUI || !tonConnectUI.account) {
+    console.log("💸 Iniciando retiro...");
+
+    if (!tonConnectUI) {
+        tg.showAlert("❌ TonConnect no está inicializado.");
+        return;
+    }
+
+    if (!tonConnectUI.account) {
         tg.showAlert("❌ Conecta tu Wallet primero.");
         return;
     }
@@ -105,13 +194,18 @@ window.requestWithdraw = async function() {
     const balanceEl = document.getElementById('balance');
     
     if (isNaN(tonAmount) || tonAmount < 5 || tonAmount > 20) {
-        tg.showAlert("Monto inválido (5-20 TON).");
+        tg.showAlert("⚠️ Monto inválido. Debe estar entre 5 y 20 TON.");
         return;
     }
 
-    tg.showConfirm(`¿Retirar ${tonAmount} TON?`, async (ok) => {
+    tg.showConfirm(`¿Retirar ${tonAmount} TON a ${tonConnectUI.account.address.slice(0, 10)}...?`, async (ok) => {
         if (ok) {
             const user = tg.initDataUnsafe.user;
+            if (!user) {
+                tg.showAlert("❌ No se pudo obtener datos del usuario.");
+                return;
+            }
+
             try {
                 const res = await fetch('/api/user', {
                     method: 'POST',
@@ -126,36 +220,52 @@ window.requestWithdraw = async function() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    balanceEl.innerText = data.newBalance;
-                    tg.showAlert("✅ Solicitud enviada.");
+                    if (data.newBalance !== undefined) {
+                        balanceEl.innerText = data.newBalance;
+                    }
+                    document.getElementById('withdraw-ton').value = '';
+                    tg.showAlert("✅ Solicitud de retiro enviada. Se procesará en 24-48 horas.");
                 } else {
                     const err = await res.json();
-                    tg.showAlert(`❌ ${err.error}`);
+                    tg.showAlert(`❌ ${err.error || 'Error desconocido'}`);
                 }
-            } catch (e) { console.error(e); }
+            } catch (error) {
+                console.error("❌ Error en retiro:", error);
+                tg.showAlert("❌ Error en la solicitud: " + error.message);
+            }
         }
     });
 };
 
-// --- 4. INICIALIZACIÓN ---
+// --- 4. FUNCIONES UTILITARIAS ---
 
 function actualizarMenuVisual(sectionId) {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
-        if (item.getAttribute('onclick').includes(sectionId)) item.classList.add('active');
+        if (item.getAttribute('onclick').includes(sectionId)) {
+            item.classList.add('active');
+        }
     });
 }
 
 async function cargarDatosUsuario() {
     const user = tg.initDataUnsafe.user;
-    if (!user) return;
+    if (!user) {
+        console.warn("⚠️ No hay datos de usuario de Telegram");
+        return;
+    }
 
+    // Actualizar header
     document.getElementById('user-name').innerText = user.first_name || "Usuario";
     const photoEl = document.getElementById('user-photo');
     const initialsEl = document.getElementById('user-initials');
 
     if (user.photo_url) {
         photoEl.src = user.photo_url;
+        photoEl.onerror = () => {
+            photoEl.style.display = 'none';
+            initialsEl.style.display = 'flex';
+        };
         photoEl.onload = () => {
             photoEl.style.display = 'block';
             initialsEl.style.display = 'none';
@@ -165,18 +275,39 @@ async function cargarDatosUsuario() {
         initialsEl.style.display = 'flex';
     }
 
+    // Cargar datos del servidor
     try {
         const res = await fetch('/api/user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id.toString(), username: user.username })
+            body: JSON.stringify({ 
+                telegramId: user.id.toString(), 
+                username: user.username 
+            })
         });
-        const data = await res.json();
-        if (data.coins !== undefined) document.getElementById('balance').innerText = data.coins;
-    } catch (e) { console.error(e); }
+
+        if (res.ok) {
+            const data = await res.json();
+            const coins = data.coins || data.value?.coins || 0;
+            if (document.getElementById('balance')) {
+                document.getElementById('balance').innerText = coins;
+            }
+            console.log("✅ Datos de usuario cargados:", coins, "🥬");
+        } else {
+            console.warn("⚠️ No se pudieron cargar datos del usuario");
+        }
+    } catch (error) {
+        console.error("❌ Error cargando datos:", error);
+    }
 }
 
+// --- 5. INICIALIZACIÓN PRINCIPAL ---
+
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("🚀 Iniciando Lotto Mini App...");
     cargarDatosUsuario();
     showSection('lobby');
 });
+
+// Log para debugging
+console.log("✅ app.js cargado");
