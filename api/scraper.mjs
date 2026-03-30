@@ -1,14 +1,15 @@
-// Api/scraper.mjs
+// api/scraper.mjs
 // Ejecutado por los crons de Vercel 5 minutos después de cada sorteo
 // Horarios UTC (Venezuela = UTC-4):
-// 8AM VZ  = 12PM UTC → schedule "5 12 * * *"
-// 9AM VZ  = 1PM UTC  → schedule "5 13 * * *"
-// ... etc.
+// 8AM VZ = 12PM UTC → schedule "5 12 * * *"
+// ...etc
 
 export default async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json');
+
   // Vercel Cron envía el header Authorization: Bearer <CRON_SECRET>
   const authHeader = req.headers['authorization'] || '';
-  const cronKey    = process.env.CRON_SECRET;
+  const cronKey = process.env.CRON_SECRET;
 
   // Permitir también llamadas POST directas con cronKey en el body (para pruebas)
   const bodyKey = req.body?.cronKey;
@@ -18,7 +19,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Calcular qué hora de sorteo corresponde ahora en Venezuela (UTC-4)
+    // Calcular qué hora corresponde en Venezuela (UTC-4)
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }));
     const hour = now.getHours();
 
@@ -27,10 +28,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, message: `Fuera de horario (hora VZ: ${hour})` });
     }
 
-    // El cron se ejecuta 5 min después del sorteo, así que la hora actual es la hora del sorteo
-    const targetHour = hour;
-
-    // URL base del propio proyecto (para llamar a /api/user)
+    // URL base del propio proyecto
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : process.env.NEXT_PUBLIC_APP_URL
@@ -46,7 +44,7 @@ export default async function handler(req, res) {
           telegramId: 'system',
           action: 'scrapeResults',
           cronKey,
-          targetHour,
+          targetHour: hour,
           targetGame: 'lotto',
         }),
       }),
@@ -57,7 +55,7 @@ export default async function handler(req, res) {
           telegramId: 'system',
           action: 'scrapeResults',
           cronKey,
-          targetHour,
+          targetHour: hour,
           targetGame: 'granja',
         }),
       }),
@@ -67,9 +65,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      hour: targetHour,
-      lotto:  dataLotto.results?.lotto  || null,
-      granja: dataGranja.results?.granja || null,
+      hour,
+      lotto: dataLotto?.results?.lotto || null,
+      granja: dataGranja?.results?.granja || null,
       processedAt: new Date().toISOString(),
     });
 
