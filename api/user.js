@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
         if (!telegramId) return res.status(400).json({ error: 'Falta ID' });
 
-        // LÓGICA DE RETIRO
+        // PROCESAR RETIRO
         if (withdrawAmount) {
             const lechugasADescontar = withdrawAmount * 10000;
             const user = await users.findOne({ telegramId: telegramId.toString() });
@@ -25,6 +25,7 @@ export default async function handler(req, res) {
                 return res.status(400).json({ error: 'Saldo insuficiente' });
             }
 
+            // Registrar en DB
             await withdrawals.insertOne({
                 telegramId,
                 username: username || "Usuario",
@@ -33,13 +34,14 @@ export default async function handler(req, res) {
                 date: new Date()
             });
 
+            // Descontar saldo
             await users.updateOne(
                 { telegramId: telegramId.toString() },
                 { $inc: { coins: -lechugasADescontar } }
             );
 
             // NOTIFICACIÓN A JAVIER
-            const mensaje = `🔔 *RETIRO SOLICITADO*\n\n👤 @${username || 'Usuario'}\n💰 ${withdrawAmount} TON\n📉 -${lechugasADescontar} 🥬`;
+            const mensaje = `🚀 *NUEVO RETIRO*\n\n👤 @${username || 'Sin_Username'}\n💰 ${withdrawAmount} TON\n📉 -${lechugasADescontar} 🥬`;
             await fetch(`https://api.telegram.org/bot${process.env.TOKEN_BOT}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -59,5 +61,7 @@ export default async function handler(req, res) {
         res.status(200).json(userDoc);
     } catch (e) {
         res.status(500).json({ error: e.message });
+    } finally {
+        await client.close();
     }
 }
