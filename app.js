@@ -33,7 +33,7 @@ async function initPurchase(lechugas, ton) {
     const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 60,
         messages: [{
-            address: "TU_DIRECCION_DE_BILLETERA_AQUI", // REEMPLAZA ESTO
+            address: "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo", // REEMPLAZA ESTO
             amount: (ton * 1000000000).toString(), 
         }]
     };
