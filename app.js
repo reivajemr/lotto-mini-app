@@ -2,9 +2,8 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 let tonConnectUI;
-const MI_WALLET = "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo";
+const MI_BILLETERA_RECEPTORA = "0QC_XSHRUMobPp6ZpHh3kkMxtM-15d75pVISwtRl7MSX_nLo";
 
-// Inicialización de Wallet con reintento
 function initTonConnect() {
     if (typeof TON_CONNECT_UI !== 'undefined') {
         tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -12,66 +11,19 @@ function initTonConnect() {
             buttonRootId: 'connect-wallet-btn-inner'
         });
     } else {
-        setTimeout(initTonConnect, 500);
+        setTimeout(initTonConnect, 500); // Reintento por error de carga
     }
 }
 
-// Navegación entre pestañas de Wallet
-function switchWalletTab(tab) {
-    const depositContent = document.getElementById('deposit-content');
-    const withdrawContent = document.getElementById('withdraw-content');
-    const btns = document.querySelectorAll('.tab-btn');
-
-    if (tab === 'deposit') {
-        depositContent.style.display = 'block';
-        withdrawContent.style.display = 'none';
-        btns[0].classList.add('active');
-        btns[1].classList.remove('active');
-    } else {
-        depositContent.style.display = 'none';
-        withdrawContent.style.display = 'block';
-        btns[0].classList.remove('active');
-        btns[1].classList.add('active');
-    }
-}
-
-async function showSection(sectionId) {
-    const mainContent = document.getElementById('main-content');
-    try {
-        const response = await fetch(`sections/${sectionId}.html`);
-        const html = await response.text();
-        mainContent.innerHTML = html;
-
-        if (sectionId === 'wallet') initTonConnect();
-        actualizarMenuVisual(sectionId);
-    } catch (e) { console.error(e); }
-}
-
-// PROCESAR COMPRA REAL
-async function initPurchase(lechugas, ton) {
-    if (!tonConnectUI || !tonConnectUI.connected) {
-        tg.showAlert("⚠️ Conecta tu Wallet primero.");
+// CORRECCIÓN: RETIRO SOLO SI HAY WALLET
+async function requestWithdraw() {
+    // 1. Verificar Wallet conectada primero
+    if (!tonConnectUI || !tonConnectUI.account) {
+        tg.showAlert("❌ Error: Debes conectar tu Wallet antes de solicitar un retiro.");
+        showSection('wallet'); // Redirigir a la pestaña de conexión
         return;
     }
 
-    const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 60,
-        messages: [{
-            address: MI_WALLET,
-            amount: (ton * 1000000000).toString()
-        }]
-    };
-
-    try {
-        await tonConnectUI.sendTransaction(transaction);
-        tg.showAlert("✅ Pago enviado. Procesando tus lechugas...");
-    } catch (e) {
-        tg.showAlert("❌ Pago cancelado.");
-    }
-}
-
-// PROCESAR RETIRO
-async function requestWithdraw() {
     const tonAmount = parseFloat(document.getElementById('withdraw-ton').value);
     const balanceEl = document.getElementById('balance');
     
@@ -80,7 +32,7 @@ async function requestWithdraw() {
         return;
     }
 
-    tg.showConfirm(`¿Retirar ${tonAmount} TON?`, async (ok) => {
+    tg.showConfirm(`¿Confirmas el retiro de ${tonAmount} TON a tu wallet conectada?`, async (ok) => {
         if (ok) {
             const user = tg.initDataUnsafe.user;
             const res = await fetch('/api/user', {
@@ -89,64 +41,40 @@ async function requestWithdraw() {
                 body: JSON.stringify({ 
                     telegramId: user.id.toString(),
                     withdrawAmount: tonAmount,
-                    username: user.username
+                    username: user.username,
+                    walletAddress: tonConnectUI.account.address // Enviamos la dirección real
                 })
             });
 
             if (res.ok) {
                 const data = await res.json();
-                balanceEl.innerText = data.newBalance; // Actualización inmediata
-                tg.showAlert("✅ Solicitud enviada con éxito.");
+                balanceEl.innerText = data.newBalance;
+                tg.showAlert("✅ Solicitud enviada. El bot te notificará el proceso.");
+            } else {
+                const err = await res.json();
+                tg.showAlert(`❌ Error: ${err.error}`);
             }
         }
     });
 }
 
-// Cargar Avatar y Saldo
-async function cargarDatosUsuario() {
-    const user = tg.initDataUnsafe.user;
-    if (!user) return;
-
-    document.getElementById('user-name').innerText = user.first_name;
-    const photoEl = document.getElementById('user-photo');
-    const initialsEl = document.getElementById('user-initials');
-
-    if (user.photo_url) {
-        photoEl.src = user.photo_url;
-        photoEl.onload = () => {
-            photoEl.style.display = 'block';
-            if(initialsEl) initialsEl.style.display = 'none';
-        };
-        photoEl.onerror = () => mostrarIniciales(user, photoEl, initialsEl);
-    } else {
-        mostrarIniciales(user, photoEl, initialsEl);
+// Función para el botón de compra
+async function initPurchase(lechugas, ton) {
+    if (!tonConnectUI || !tonConnectUI.account) {
+        tg.showAlert("❌ Conecta tu Wallet primero.");
+        return;
     }
-
+    const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 60,
+        messages: [{ address: MI_BILLETERA_RECEPTORA, amount: (ton * 1000000000).toString() }]
+    };
     try {
-        const res = await fetch('/api/user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telegramId: user.id.toString(), username: user.username })
-        });
-        const data = await res.json();
-        if (data.coins !== undefined) document.getElementById('balance').innerText = data.coins;
-    } catch (e) { console.error("Error API"); }
+        await tonConnectUI.sendTransaction(transaction);
+        tg.showAlert("¡Pago en camino!");
+    } catch (e) { tg.showAlert("Transacción cancelada."); }
 }
 
-function mostrarIniciales(user, img, div) {
-    img.style.display = 'none';
-    if(div) {
-        div.style.display = 'flex';
-        div.innerText = (user.first_name || "U").charAt(0).toUpperCase();
-    }
-}
-
-function actualizarMenuVisual(sectionId) {
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.getAttribute('onclick').includes(sectionId)) item.classList.add('active');
-    });
-}
+// ... Mantén tus funciones cargarDatosUsuario y showSection ...
 
 document.addEventListener('DOMContentLoaded', () => {
     cargarDatosUsuario();
