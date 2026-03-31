@@ -1,75 +1,57 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
+import { useState } from 'react';
 import { apiCall } from '../App';
 
 interface WalletProps {
   telegramId: string;
   username: string;
   balance: number;
+  walletAddress: string | null;
   onBalanceUpdate: (newBalance: number) => void;
   showAlert: (msg: string) => void;
   haptic: (type?: 'light' | 'medium' | 'heavy') => void;
 }
 
-// 1 TON = 1,000 🥬
 const PACKS = [
-  { ton: 0.1, lechugas: 100,  label: 'Starter',  popular: false },
-  { ton: 0.5, lechugas: 500,  label: 'Normal',   popular: false },
-  { ton: 1,   lechugas: 1000, label: 'Popular',  popular: true  },
-  { ton: 2,   lechugas: 2000, label: 'Pro',       popular: false },
-  { ton: 5,   lechugas: 5000, label: 'VIP',       popular: false },
+  { lechugas: 1_000,  ton: 1,   label: 'Básico',      popular: false },
+  { lechugas: 5_000,  ton: 5,   label: 'Estándar',    popular: true  },
+  { lechugas: 10_000, ton: 10,  label: 'Pro',          popular: false },
+  { lechugas: 25_000, ton: 25,  label: 'VIP',          popular: false },
+  { lechugas: 50_000, ton: 50,  label: 'Premium',      popular: false },
 ];
-
-type TabType = 'deposit' | 'withdraw';
 
 export default function Wallet({
   telegramId,
   username,
   balance,
+  walletAddress: initialWalletAddress,
   onBalanceUpdate,
   showAlert,
   haptic,
 }: WalletProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('deposit');
+  const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>('deposit');
+  const [walletAddress, setWalletAddress] = useState(initialWalletAddress || '');
+  const [walletSaved, setWalletSaved] = useState(!!initialWalletAddress);
   const [withdrawTon, setWithdrawTon] = useState('');
-  const [withdrawSent, setWithdrawSent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [adminWallet, setAdminWallet] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [selectedPack, setSelectedPack] = useState<typeof PACKS[0] | null>(null);
-  const [sendingTx, setSendingTx] = useState(false);
-  const [txStatus, setTxStatus] = useState<'idle' | 'sending' | 'confirming' | 'done' | 'error'>('idle');
-  const [walletAddressManual, setWalletAddressManual] = useState('');
-  const [walletSaved, setWalletSaved] = useState(false);
-
-  const [tonConnectUI] = useTonConnectUI();
-  const wallet = useTonWallet();
+  const [withdrawSent, setWithdrawSent] = useState<string | null>(null);
+  const [adminWallet, setAdminWallet] = useState<string | null>(null);
 
   const balanceTON = (balance / 1000).toFixed(3);
 
   // ── Cargar wallet del admin ──────────────────────────────
-  const loadAdminWallet = useCallback(async () => {
+  const loadAdminWallet = async () => {
     if (adminWallet) return;
     try {
-      const data = await apiCall({ telegramId, action: 'getAdminWallet' }) as { wallet?: string };
-      if (data?.wallet) setAdminWallet(data.wallet);
-    } catch { /* ignorar */ }
-  }, [telegramId, adminWallet]);
-
-  useEffect(() => {
-    loadAdminWallet();
-  }, [loadAdminWallet]);
-
-  // ── Guardar dirección TON cuando se conecta wallet ──────
-  useEffect(() => {
-    if (wallet?.account?.address) {
-      apiCall({
+      const data = await apiCall({
         telegramId,
-        action: 'saveTonWallet',
-        tonAddress: wallet.account.address,
-      }).catch(() => {});
+        action: 'getAdminWallet',
+      }) as { success?: boolean; wallet?: string };
+      if (data?.wallet) setAdminWallet(data.wallet);
+    } catch {
+      /* ignorar */
     }
-  }, [wallet?.account?.address, telegramId]);
+  };
 
   // ── Copiar al portapapeles ──────────────────────────────
   const copy = (text: string, key: string) => {
@@ -80,96 +62,10 @@ export default function Wallet({
     });
   };
 
-  // ── DEPÓSITO CON TON CONNECT ────────────────────────────
-  const handleTonDeposit = async (pack: typeof PACKS[0]) => {
-    if (!wallet) {
-      showAlert('⚠️ Primero conecta tu wallet TON con el botón de arriba');
-      return;
-    }
-    if (!adminWallet) {
-      showAlert('⚠️ No se pudo cargar la wallet del admin. Intenta de nuevo.');
-      return;
-    }
-
-    haptic('heavy');
-    setSelectedPack(pack);
-    setSendingTx(true);
-    setTxStatus('sending');
-
-    try {
-      // Convertir TON a nanoTON (1 TON = 1,000,000,000 nanoTON)
-      const nanoTon = BigInt(Math.round(pack.ton * 1_000_000_000)).toString();
-
-      // Mensaje con el ID del usuario para identificar el pago
-      const memo = `Animalito Lotto - ${telegramId}`;
-
-      const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 600, // válido 10 min
-        messages: [
-          {
-            address: adminWallet,
-            amount: nanoTon,
-            payload: btoa(memo), // payload en base64
-          },
-        ],
-      };
-
-      setTxStatus('confirming');
-      const result = await tonConnectUI.sendTransaction(transaction);
-
-      // Transacción enviada exitosamente
-      setTxStatus('done');
-      haptic('heavy');
-
-      // Confirmar en backend y acreditar lechugas automáticamente
-      const txHash = result.boc || `tx_${Date.now()}`;
-      
-      setLoading(true);
-      const confirmData = await apiCall({
-        telegramId,
-        username,
-        action: 'confirmDeposit',
-        txHash,
-        tonAmount: pack.ton,
-        lechugas: pack.lechugas,
-      }) as { success?: boolean; newBalance?: number; error?: string };
-
-      if (confirmData?.success && confirmData.newBalance !== undefined) {
-        onBalanceUpdate(confirmData.newBalance);
-        showAlert(
-          `✅ ¡Depósito confirmado!\n\n` +
-          `💎 ${pack.ton} TON enviados\n` +
-          `🥬 +${pack.lechugas.toLocaleString()} lechugas acreditadas\n` +
-          `🏦 Nuevo balance: ${confirmData.newBalance.toLocaleString()} 🥬`
-        );
-      } else {
-        showAlert(
-          `✅ Transacción enviada!\n\n` +
-          `💎 ${pack.ton} TON → ${pack.lechugas.toLocaleString()} 🥬\n` +
-          `⏳ El admin acreditará tu saldo en menos de 24h.\n` +
-          `📋 Guarda tu ID: ${telegramId}`
-        );
-      }
-
-    } catch (err: any) {
-      setTxStatus('error');
-      if (err?.message?.includes('User rejects')) {
-        showAlert('❌ Transacción cancelada por el usuario');
-      } else {
-        showAlert('❌ Error al enviar: ' + (err?.message || 'Error desconocido'));
-      }
-    } finally {
-      setSendingTx(false);
-      setLoading(false);
-      setSelectedPack(null);
-      setTimeout(() => setTxStatus('idle'), 3000);
-    }
-  };
-
-  // ── Guardar wallet manual ───────────────────────────────
+  // ── Guardar wallet ──────────────────────────────────────
   const handleSaveWallet = async () => {
-    if (!walletAddressManual.trim() || walletAddressManual.length < 10) {
-      showAlert('⚠️ Ingresa una dirección TON válida');
+    if (!walletAddress.trim() || walletAddress.length < 10) {
+      showAlert('⚠️ Ingresa una dirección TON válida (mínimo 10 caracteres)');
       return;
     }
     haptic('medium');
@@ -179,17 +75,19 @@ export default function Wallet({
         telegramId,
         username,
         action: 'wallet',
-        walletAddress: walletAddressManual.trim(),
+        walletAddress: walletAddress.trim(),
       }) as { success?: boolean; error?: string };
+
       if (data?.success) {
         setWalletSaved(true);
         haptic('heavy');
         showAlert('✅ Wallet guardada correctamente.');
       } else {
-        showAlert('❌ Error al guardar wallet: ' + (data?.error || 'desconocido'));
+        showAlert('❌ Error al guardar wallet: ' + (data?.error || 'Error desconocido'));
       }
     } catch (err) {
-      showAlert('❌ ' + (err instanceof Error ? err.message : 'Error de conexión'));
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      showAlert('❌ ' + msg);
     } finally {
       setLoading(false);
     }
@@ -198,9 +96,12 @@ export default function Wallet({
   // ── Solicitar retiro ────────────────────────────────────
   const handleWithdraw = async () => {
     haptic('medium');
-    const withdrawAddr = wallet?.account?.address || walletAddressManual.trim();
-    if (!withdrawAddr) {
-      showAlert('⚠️ Conecta tu wallet TON o ingresa una dirección manualmente.');
+    if (!walletAddress.trim()) {
+      showAlert('⚠️ Ingresa y guarda tu dirección TON wallet primero.');
+      return;
+    }
+    if (!walletSaved) {
+      showAlert('⚠️ Presiona "Guardar wallet" antes de retirar.');
       return;
     }
     const amount = parseFloat(withdrawTon);
@@ -219,96 +120,64 @@ export default function Wallet({
         username,
         action: 'withdraw',
         withdrawAmount: amount,
-        walletAddress: withdrawAddr,
+        walletAddress: walletAddress.trim(),
       }) as { success?: boolean; newBalance?: number; withdrawId?: string; error?: string };
 
       if (data?.success) {
         haptic('heavy');
         setWithdrawSent(data.withdrawId || 'OK');
         setWithdrawTon('');
-        if (data.newBalance !== undefined) onBalanceUpdate(data.newBalance);
+        if (data.newBalance !== undefined) {
+          onBalanceUpdate(data.newBalance);
+        }
         showAlert(
           `✅ Solicitud enviada!\n\n` +
           `📋 ID: #${data.withdrawId}\n` +
           `💰 Monto: ${amount} TON\n` +
-          `👛 ${withdrawAddr.slice(0, 8)}...${withdrawAddr.slice(-6)}\n\n` +
+          `👛 ${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}\n\n` +
           `El admin procesará tu retiro en 24-48h.\nTe notificaremos por Telegram.`
         );
       } else {
         showAlert('❌ ' + (data?.error || 'Error al procesar retiro'));
       }
     } catch (err) {
-      showAlert('❌ ' + (err instanceof Error ? err.message : 'Error de conexión'));
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      showAlert('❌ ' + msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const isWalletConnected = !!wallet?.account?.address;
-  const connectedAddress = wallet?.account?.address || '';
-
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4">
 
-      {/* ── Balance Card ── */}
-      <div className="relative bg-gradient-to-br from-teal-500/20 to-emerald-600/20 border border-teal-500/30 rounded-2xl p-5 overflow-hidden">
-        <div className="absolute top-3 right-4 text-4xl opacity-30">💎</div>
-        <p className="text-white/60 text-xs mb-1">Tu balance</p>
-        <p className="text-3xl font-black text-white">{balance.toLocaleString()} <span className="text-xl">🥬</span></p>
-        <p className="text-teal-300 text-sm mt-1">≈ {balanceTON} TON</p>
+      {/* Balance Card */}
+      <div className="bg-gradient-to-br from-teal-600/30 to-emerald-600/20 border border-teal-500/30 rounded-2xl p-5 flex items-center justify-between">
+        <div>
+          <p className="text-white/60 text-xs mb-1">Tu balance</p>
+          <p className="text-white font-bold text-2xl">{balance.toLocaleString()} 🥬</p>
+          <p className="text-teal-300 text-sm">≈ {balanceTON} TON</p>
+        </div>
+        <span className="text-5xl">💰</span>
       </div>
 
-      {/* ── TON Connect Button ── */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-        <p className="text-white/70 text-xs mb-3 font-semibold uppercase tracking-wider">🔗 Conectar Wallet TON</p>
-        {isWalletConnected ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/30 rounded-xl px-3 py-2.5">
-              <span className="text-green-400 text-lg">✅</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-teal-300 text-xs font-semibold">Wallet conectada</p>
-                <p className="text-white/60 text-[10px] font-mono truncate">
-                  {connectedAddress.slice(0, 16)}...{connectedAddress.slice(-8)}
-                </p>
-              </div>
-              <button
-                onClick={() => copy(connectedAddress, 'addr')}
-                className="text-white/40 hover:text-white text-xs px-2 py-1 rounded-lg bg-white/5"
-              >
-                {copied === 'addr' ? '✅' : '📋'}
-              </button>
-            </div>
-            <button
-              onClick={() => tonConnectUI.disconnect()}
-              className="w-full py-2 text-xs text-white/40 hover:text-white/70 transition-colors"
-            >
-              Desconectar wallet
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => { haptic('medium'); tonConnectUI.openModal(); }}
-            className="w-full bg-blue-500 hover:bg-blue-400 active:scale-95 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
-          >
-            <span>💎</span>
-            <span>Conectar Wallet TON</span>
-          </button>
-        )}
-      </div>
-
-      {/* ── Tabs ── */}
-      <div className="flex gap-2 bg-white/5 p-1 rounded-xl">
+      {/* Tabs */}
+      <div className="flex bg-white/5 rounded-xl p-1 gap-1">
         {(['deposit', 'withdraw'] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => { setActiveTab(tab); haptic('light'); }}
+            onClick={() => {
+              haptic('light');
+              setActiveTab(tab);
+              if (tab === 'deposit') loadAdminWallet();
+            }}
             className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === tab
                 ? 'bg-teal-500 text-white shadow-lg'
                 : 'text-white/50 hover:text-white/80'
             }`}
           >
-            {tab === 'deposit' ? '⬇️ Depositar' : '⬆️ Retirar'}
+            {tab === 'deposit' ? '📥 Depositar' : '📤 Retirar'}
           </button>
         ))}
       </div>
@@ -316,97 +185,94 @@ export default function Wallet({
       {/* ══ DEPOSITAR ══ */}
       {activeTab === 'deposit' && (
         <div className="space-y-4">
-
           {/* Instrucciones */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 space-y-2">
-            <p className="text-blue-300 font-semibold text-sm">📋 Cómo depositar:</p>
-            {isWalletConnected ? (
-              <p className="text-white/70 text-xs">
-                ✅ Tu wallet está conectada. Elige un paquete y pulsa <strong className="text-white">Comprar</strong> para enviar TON automáticamente. ¡Las lechugas se acreditarán al instante!
-              </p>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-white font-semibold text-sm mb-3">📋 Cómo depositar:</p>
+            <ol className="space-y-2">
+              {[
+                'Elige el paquete que quieres',
+                'Envía el TON exacto a la wallet del admin',
+                'Incluye tu Telegram ID en el memo/comentario',
+                'Tu balance se acredita en menos de 24h',
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-white/70 text-xs">
+                  <span className="bg-teal-500/30 text-teal-300 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                    {i + 1}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {/* Wallet del admin */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-white/60 text-xs mb-2">📬 Wallet del administrador:</p>
+            {adminWallet ? (
+              <div className="flex items-center gap-2">
+                <p className="text-teal-300 text-sm font-mono flex-1 break-all">{adminWallet}</p>
+                <button
+                  onClick={() => copy(adminWallet, 'admin')}
+                  className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs text-white flex-shrink-0 transition-all"
+                >
+                  {copied === 'admin' ? '✅' : '📋'}
+                </button>
+              </div>
             ) : (
-              <p className="text-white/70 text-xs">
-                🔗 Conecta tu wallet TON arriba para depósitos automáticos, o envía manualmente con tu ID en el memo.
-              </p>
+              <button
+                onClick={loadAdminWallet}
+                className="text-teal-400 text-sm underline"
+              >
+                Ver wallet →
+              </button>
             )}
           </div>
 
-          {/* Wallet del admin (para depósito manual) */}
-          {!isWalletConnected && (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
-              <p className="text-white/70 text-xs font-semibold">📬 Wallet del administrador (depósito manual):</p>
-              {adminWallet ? (
-                <div className="flex items-center gap-2">
-                  <p className="text-white text-xs font-mono break-all flex-1">{adminWallet}</p>
-                  <button
-                    onClick={() => copy(adminWallet, 'admin')}
-                    className="bg-teal-500/20 border border-teal-500/30 text-teal-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
-                  >
-                    {copied === 'admin' ? '✅ Copiado' : '📋 Copiar'}
-                  </button>
-                </div>
-              ) : (
-                <div className="h-6 bg-white/10 rounded animate-pulse" />
-              )}
-
-              <div className="flex items-center gap-2 bg-white/3 rounded-lg p-2">
-                <p className="text-white/50 text-xs flex-1">🆔 Tu ID (ponlo en el memo):</p>
-                <p className="text-white font-mono text-xs font-bold">{telegramId}</p>
-                <button onClick={() => copy(telegramId, 'tid')} className="text-white/40 text-xs">
-                  {copied === 'tid' ? '✅' : '📋'}
-                </button>
-              </div>
+          {/* Tu ID de Telegram */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-white/60 text-xs mb-2">🆔 Tu Telegram ID (ponlo en el memo):</p>
+            <div className="flex items-center gap-2">
+              <p className="text-white font-mono font-bold flex-1">{telegramId}</p>
+              <button
+                onClick={() => copy(telegramId, 'id')}
+                className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-xs text-white flex-shrink-0 transition-all"
+              >
+                {copied === 'id' ? '✅' : '📋'}
+              </button>
             </div>
-          )}
-
-          {/* Paquetes */}
-          <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">Paquetes disponibles</p>
-          <div className="grid grid-cols-1 gap-3">
-            {PACKS.map(pack => {
-              const isSending = sendingTx && selectedPack?.ton === pack.ton;
-              return (
-                <div
-                  key={pack.ton}
-                  onClick={() => !sendingTx && handleTonDeposit(pack)}
-                  className={`relative rounded-2xl border p-4 cursor-pointer transition-all active:scale-[0.98] ${
-                    pack.popular
-                      ? 'bg-gradient-to-r from-teal-500/20 to-emerald-500/20 border-teal-500/40'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10'
-                  } ${sendingTx ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {pack.popular && (
-                    <span className="absolute -top-2 right-4 bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      ⭐ Popular
-                    </span>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-white font-bold text-lg">{pack.lechugas.toLocaleString()} 🥬</p>
-                      <p className="text-white/40 text-xs">{pack.label}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-teal-300 font-black text-xl">{pack.ton} TON</p>
-                      {isSending ? (
-                        <p className="text-yellow-400 text-xs animate-pulse">
-                          {txStatus === 'sending' ? '⏳ Abriendo wallet...' :
-                           txStatus === 'confirming' ? '📤 Confirmando...' :
-                           txStatus === 'done' ? '✅ Enviado!' :
-                           txStatus === 'error' ? '❌ Error' : '...'}
-                        </p>
-                      ) : (
-                        <p className="text-white/40 text-xs">
-                          {isWalletConnected ? '↗ Tap para comprar' : '↗ Tap para info'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
 
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-center">
-            <p className="text-orange-300 text-xs">⚠️ Red Testnet TON — Solo para pruebas</p>
+          {/* Paquetes */}
+          <p className="text-white font-semibold text-sm">Paquetes disponibles</p>
+          <div className="space-y-2">
+            {PACKS.map(pack => (
+              <div
+                key={pack.lechugas}
+                className={`rounded-xl border p-3.5 flex items-center justify-between transition-all relative ${
+                  pack.popular
+                    ? 'bg-teal-500/15 border-teal-500/40'
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                {pack.popular && (
+                  <div className="absolute -top-2 left-4 bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    ⭐ Popular
+                  </div>
+                )}
+                <div>
+                  <p className="text-white font-bold">{pack.lechugas.toLocaleString()} 🥬</p>
+                  <p className="text-white/50 text-xs">{pack.label}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-teal-300 font-bold">{pack.ton} TON</p>
+                  <p className="text-white/30 text-xs">1,000🥬 = 1 TON</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+            <p className="text-yellow-300 text-xs">⚠️ Red Testnet TON — Solo para pruebas</p>
           </div>
         </div>
       )}
@@ -416,68 +282,65 @@ export default function Wallet({
         <div className="space-y-4">
 
           {withdrawSent && (
-            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+            <div className="bg-green-500/15 border border-green-500/30 rounded-2xl p-4 text-center">
               <p className="text-green-400 font-bold">✅ Retiro pendiente #{withdrawSent}</p>
-              <p className="text-white/50 text-xs mt-1">
+              <p className="text-white/60 text-xs mt-1">
                 Recibirás una notificación en Telegram cuando sea procesado.
               </p>
             </div>
           )}
 
           {/* Instrucciones */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
-            <p className="text-white/70 text-sm font-semibold">📤 Cómo funciona el retiro:</p>
-            {[
-              'Conecta tu wallet TON (arriba) o ingresa la dirección',
-              'Ingresa el monto que quieres retirar',
-              'El admin verifica y envía tu TON en 24-48h',
-              'Recibes confirmación por Telegram ✅',
-            ].map((step, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <div className="w-5 h-5 rounded-full bg-teal-500/30 text-teal-300 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {i + 1}
-                </div>
-                <p className="text-white/60 text-xs">{step}</p>
-              </div>
-            ))}
-            <p className="text-yellow-400 text-xs pt-1">⚠️ Mínimo: 0.1 TON</p>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+            <p className="text-white font-semibold text-sm mb-3">📤 Cómo funciona el retiro:</p>
+            <ol className="space-y-2">
+              {[
+                'Guarda tu dirección TON wallet',
+                'Ingresa el monto que quieres retirar',
+                'El admin verifica y envía tu TON en 24-48h',
+                'Recibes confirmación por Telegram ✅',
+              ].map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-white/70 text-xs">
+                  <span className="bg-teal-500/30 text-teal-300 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                    {i + 1}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+            <p className="text-yellow-300/70 text-xs mt-3">
+              ⚠️ Mínimo: 0.1 TON · Balance reservado hasta resolución
+            </p>
           </div>
 
-          {/* Dirección de retiro */}
+          {/* Wallet address */}
           <div className="space-y-2">
-            <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">👛 Dirección de retiro</p>
-            {isWalletConnected ? (
-              <div className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/30 rounded-xl px-3 py-3">
-                <span className="text-green-400">✅</span>
-                <p className="text-white text-xs font-mono truncate flex-1">
-                  {connectedAddress.slice(0, 20)}...{connectedAddress.slice(-10)}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={walletAddressManual}
-                  onChange={e => { setWalletAddressManual(e.target.value); setWalletSaved(false); }}
-                  placeholder="EQD... o UQ..."
-                  className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-teal-500 transition-colors"
-                />
-                <button
-                  onClick={handleSaveWallet}
-                  disabled={loading}
-                  className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl text-sm transition-all"
-                >
-                  {walletSaved ? '✅ Guardada' : '💾 Guardar wallet'}
-                </button>
-              </div>
-            )}
+            <p className="text-white/70 text-sm">👛 Tu dirección TON Wallet</p>
+            <input
+              type="text"
+              value={walletAddress}
+              onChange={e => { setWalletAddress(e.target.value); setWalletSaved(false); }}
+              placeholder="EQD... o UQ..."
+              className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-teal-500 transition-colors"
+            />
+            <button
+              onClick={handleSaveWallet}
+              disabled={loading || walletSaved}
+              className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 ${
+                walletSaved
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : 'bg-teal-500 hover:bg-teal-400 text-white'
+              }`}
+            >
+              {loading ? '⏳ Guardando...' : walletSaved ? '✅ Wallet guardada' : 'Guardar wallet'}
+            </button>
           </div>
 
-          {/* Monto */}
+          {/* Monto a retirar */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">💸 Monto (TON)</p>
-              <p className="text-white/40 text-xs">Disponible: {balanceTON} TON</p>
+              <p className="text-white/70 text-sm">💸 Monto a retirar (TON)</p>
+              <p className="text-teal-300 text-xs">Disponible: {balanceTON} TON</p>
             </div>
             <div className="flex gap-2">
               <input
@@ -487,17 +350,17 @@ export default function Wallet({
                 placeholder="0.1"
                 min="0.1"
                 step="0.1"
-                className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white text-center text-lg font-bold focus:outline-none focus:border-teal-500 placeholder-white/30"
+                className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white text-center text-lg font-bold focus:outline-none focus:border-teal-500 placeholder-white/30 transition-colors"
               />
               <button
                 onClick={() => setWithdrawTon(balanceTON)}
-                className="bg-white/10 text-white/60 px-3 rounded-xl text-xs font-semibold hover:bg-white/20"
+                className="bg-white/10 hover:bg-white/20 px-3 rounded-xl text-white/70 text-sm transition-all"
               >
                 MAX
               </button>
             </div>
             {withdrawTon && !isNaN(parseFloat(withdrawTon)) && (
-              <p className="text-teal-300 text-xs text-center">
+              <p className="text-white/50 text-xs text-center">
                 = {(parseFloat(withdrawTon) * 1000).toLocaleString()} 🥬
               </p>
             )}
@@ -505,19 +368,17 @@ export default function Wallet({
 
           <button
             onClick={handleWithdraw}
-            disabled={loading || !withdrawTon}
-            className={`w-full py-4 rounded-xl font-bold text-base transition-all active:scale-95 ${
-              loading || !withdrawTon
-                ? 'bg-white/10 text-white/30'
-                : 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-lg'
-            }`}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 disabled:opacity-50"
           >
-            {loading ? '⏳ Procesando...' : '📤 Solicitar Retiro'}
+            {loading ? '⏳ Procesando...' : '📤 Solicitar retiro'}
           </button>
 
-          <p className="text-white/30 text-xs text-center">
-            🔒 Tu balance queda reservado hasta que el admin procese el retiro
-          </p>
+          <div className="bg-white/3 border border-white/5 rounded-xl p-3 text-center">
+            <p className="text-white/40 text-xs">
+              🔒 Tu balance queda reservado hasta que el admin procese el retiro
+            </p>
+          </div>
         </div>
       )}
     </div>
