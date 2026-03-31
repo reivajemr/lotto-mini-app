@@ -1,4 +1,4 @@
-// api/user.mjs
+// api/user.mjs — Animalito Lotto Backend
 import { MongoClient } from 'mongodb';
 
 const uri = process.env.MONGODB_URI;
@@ -23,7 +23,6 @@ async function getClient() {
   return client;
 }
 
-// Notificar al ADMIN
 async function notify(text) {
   const token = process.env.BOT_TOKEN;
   const chatId = process.env.CHAT_ID;
@@ -37,10 +36,9 @@ async function notify(text) {
   } catch { /* ignorar */ }
 }
 
-// Notificar al USUARIO
 async function notifyUser(telegramId, text) {
   const token = process.env.BOT_TOKEN;
-  if (!token) return;
+  if (!token || !telegramId || telegramId.startsWith('test_')) return;
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -50,660 +48,409 @@ async function notifyUser(telegramId, text) {
   } catch { /* ignorar */ }
 }
 
-// Límites de apuesta
-const BET_CONFIG = {
-  minBet: 50,
-  maxBetPerUser: 1000,
-  maxBetGlobal: 10000,
-  multiplier: 30,
-};
+const BET_CONFIG = { minBet: 50, maxBetPerUser: 1000, maxBetGlobal: 10000, multiplier: 30 };
 
-// Hora Venezuela
 function vzNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }));
 }
 
 function vzDateStr(d) {
   const vz = d || vzNow();
-  return `${vz.getFullYear()}-${String(vz.getMonth() + 1).padStart(2, '0')}-${String(vz.getDate()).padStart(2, '0')}`;
+  return `${vz.getFullYear()}-${String(vz.getMonth()+1).padStart(2,'0')}-${String(vz.getDate()).padStart(2,'0')}`;
 }
 
-// 37 Animalitos
 const ANIMALS_MAP = {
-  1: 'Carnero', 2: 'Toro', 3: 'Ciempiés', 4: 'Alacrán', 5: 'León', 6: 'Rana', 7: 'Perico',
-  8: 'Ratón', 9: 'Águila', 10: 'Tigre', 11: 'Gato', 12: 'Caballo', 13: 'Mono', 14: 'Paloma',
-  15: 'Zorro', 16: 'Oso', 17: 'Pavo', 18: 'Burro', 19: 'Chivo', 20: 'Cochino', 21: 'Gallo',
-  22: 'Camello', 23: 'Zebra', 24: 'Iguana', 25: 'Gavilán', 26: 'Murciélago', 27: 'Perro',
-  28: 'Venado', 29: 'Morrocoy', 30: 'Caimán', 31: 'Anteater', 32: 'Serpiente', 33: 'Lechuza',
-  34: 'Loro', 35: 'Jirafa', 36: 'Culebra', 0: 'Ballena',
+  1:'Carnero',2:'Toro',3:'Ciempiés',4:'Alacrán',5:'León',6:'Rana',7:'Perico',
+  8:'Ratón',9:'Águila',10:'Tigre',11:'Gato',12:'Caballo',13:'Mono',14:'Paloma',
+  15:'Zorro',16:'Oso',17:'Pavo',18:'Burro',19:'Chivo',20:'Cochino',21:'Gallo',
+  22:'Camello',23:'Zebra',24:'Iguana',25:'Gavilán',26:'Murciélago',27:'Perro',
+  28:'Venado',29:'Morrocoy',30:'Caimán',31:'Anteater',32:'Serpiente',33:'Lechuza',
+  34:'Loro',35:'Jirafa',36:'Culebra',0:'Ballena',
 };
 
-// Horarios de sorteos LOTTO ACTIVO (cada hora de 8AM a 7PM VZ)
-const DRAW_TIMES = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
-
-// ══════════════════════════════════════════════════════════
-// FLASH LOTTO — sorteos cada 5 minutos
-// ══════════════════════════════════════════════════════════
-function getFlashDrawId(date, slotMinutes) {
-  const dateStr = vzDateStr(date);
-  const h = String(Math.floor(slotMinutes / 60)).padStart(2, '0');
-  const m = String(slotMinutes % 60).padStart(2, '0');
-  return `flash-${dateStr}-${h}${m}`;
+// Sorteos oficiales de Lotto Activo
+function getLottoDraw(hour, dateStr) {
+  const drawTimes = [8,9,10,11,12,13,14,15,16,17,18,19];
+  if (!drawTimes.includes(hour)) return null;
+  const hh = String(hour).padStart(2,'0');
+  return {
+    drawId: `lotto-${dateStr}-${hh}`,
+    game: 'lotto',
+    time: `${hh}:00 AM`.replace('AM', hour < 12 ? 'AM' : 'PM').replace(/(\d+):00 [AP]M/, (_, h) => {
+      const n = parseInt(h);
+      const suffix = n < 12 ? 'AM' : 'PM';
+      const display = n > 12 ? n - 12 : n;
+      return `${display < 10 ? '0' : ''}${display}:00 ${suffix}`;
+    }),
+    date: dateStr,
+    status: 'pending',
+    closeTime: new Date(`${dateStr}T${hh}:00:00-04:00`).toISOString(),
+    drawTime: new Date(`${dateStr}T${hh}:05:00-04:00`).toISOString(),
+    resultTime: new Date(`${dateStr}T${hh}:10:00-04:00`).toISOString(),
+  };
 }
 
-// Genera lista de sorteos Flash para un día dado (8AM-8PM VZ, cada 5 min)
-function generateFlashDraws(dateStr) {
+// Generar todos los sorteos de lotto para una fecha
+function getLottoDrawsForDate(dateStr) {
   const draws = [];
-  const now = vzNow();
-  const nowDateStr = vzDateStr(now);
-  const isToday = dateStr === nowDateStr;
+  const drawHours = [8,9,10,11,12,13,14,15,16,17,18,19];
+  for (const hour of drawHours) {
+    const hh = String(hour).padStart(2,'0');
+    const n = hour > 12 ? hour - 12 : hour;
+    const suffix = hour < 12 ? 'AM' : 'PM';
+    const timeStr = `${String(n).padStart(2,'0')}:00 ${suffix}`;
+    draws.push({
+      drawId: `lotto-${dateStr}-${hh}`,
+      game: 'lotto',
+      time: timeStr,
+      date: dateStr,
+      status: 'pending',
+      closeTime: new Date(`${dateStr}T${hh}:00:00-04:00`).toISOString(),
+      drawTime: new Date(`${dateStr}T${hh}:05:00-04:00`).toISOString(),
+      resultTime: new Date(`${dateStr}T${hh}:10:00-04:00`).toISOString(),
+    });
+  }
+  return draws;
+}
 
-  for (let h = 8; h < 20; h++) {
-    for (let m = 0; m < 60; m += 5) {
-      const slotMinutes = h * 60 + m;
-      const drawId = `flash-${dateStr}-${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}`;
-      const time = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-      
-      // Calcular tiempos
-      const drawTimestamp = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
-      // Convertir a UTC (Venezuela es UTC-4)
-      const drawTimeUTC = new Date(drawTimestamp.getTime() + 4 * 60 * 60 * 1000);
-      const closeTimeUTC = new Date(drawTimeUTC.getTime() - 2 * 60 * 1000); // cierra 2 min antes
-      const resultTimeUTC = new Date(drawTimeUTC.getTime() + 1 * 60 * 1000); // resultado 1 min después
-
-      let status = 'upcoming';
-      if (isToday) {
-        const nowUTC = new Date();
-        if (nowUTC > resultTimeUTC) status = 'done';
-        else if (nowUTC > drawTimeUTC) status = 'drawing';
-        else if (nowUTC > closeTimeUTC) status = 'closed';
-        else if (nowUTC > new Date(drawTimeUTC.getTime() - 30 * 60 * 1000)) status = 'open';
-        else status = 'upcoming';
-      }
-
+// Generar sorteos Flash para hoy (cada 5 min de 08:00 a 20:00)
+function getFlashDrawsForDate(dateStr) {
+  const draws = [];
+  for (let hour = 8; hour < 20; hour++) {
+    for (let min = 0; min < 60; min += 5) {
+      const hh = String(hour).padStart(2,'0');
+      const mm = String(min).padStart(2,'0');
+      const n = hour > 12 ? hour - 12 : hour;
+      const suffix = hour < 12 ? 'AM' : 'PM';
+      const drawId = `flash-${dateStr}-${hh}${mm}`;
+      const closeISO = new Date(`${dateStr}T${hh}:${mm}:00-04:00`).toISOString();
+      const drawISO = new Date(`${dateStr}T${hh}:${String(min+2).padStart(2,'0')}:00-04:00`).toISOString();
       draws.push({
         drawId,
-        time,
         game: 'flash',
-        status,
-        closeTime: closeTimeUTC.toISOString(),
-        drawTime: drawTimeUTC.toISOString(),
-        resultTime: resultTimeUTC.toISOString(),
+        time: `${String(n).padStart(2,'0')}:${mm} ${suffix}`,
         date: dateStr,
+        status: 'pending',
+        closeTime: closeISO,
+        drawTime: drawISO,
+        resultTime: drawISO,
       });
     }
   }
   return draws;
 }
 
-// ══════════════════════════════════════════════════════════
-// LOTTO ACTIVO — genera sorteos para un día
-// ══════════════════════════════════════════════════════════
-function generateLottoDraws(dateStr) {
-  const draws = [];
-  const now = vzNow();
-  const nowDateStr = vzDateStr(now);
-  const isToday = dateStr === nowDateStr;
-  const isFuture = dateStr > nowDateStr;
-
-  for (const time of DRAW_TIMES) {
-    const [h, m] = time.split(':').map(Number);
-    const drawId = `lotto-${dateStr}-${String(h).padStart(2,'0')}${String(m).padStart(2,'0')}`;
-    
-    const drawTimestamp = new Date(`${dateStr}T${time}:00`);
-    const drawTimeUTC = new Date(drawTimestamp.getTime() + 4 * 60 * 60 * 1000);
-    const closeTimeUTC = new Date(drawTimeUTC.getTime() - 10 * 60 * 1000);
-    const resultTimeUTC = new Date(drawTimeUTC.getTime() + 5 * 60 * 1000);
-
-    let status = 'upcoming';
-    if (isFuture) {
-      status = 'upcoming';
-    } else if (isToday) {
-      const nowUTC = new Date();
-      if (nowUTC > resultTimeUTC) status = 'done';
-      else if (nowUTC > drawTimeUTC) status = 'drawing';
-      else if (nowUTC > closeTimeUTC) status = 'closed';
-      else status = 'open';
-    } else {
-      // Día pasado
-      status = 'done';
-    }
-
-    draws.push({
-      drawId,
-      time,
-      game: 'lotto',
-      status,
-      closeTime: closeTimeUTC.toISOString(),
-      drawTime: drawTimeUTC.toISOString(),
-      resultTime: resultTimeUTC.toISOString(),
-      date: dateStr,
-    });
-  }
-  return draws;
+// Código de referido aleatorio
+function genRefCode(telegramId) {
+  return 'REF' + telegramId.slice(-4).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase();
 }
 
-// ══════════════════════════════════════════════════════════
-// PAGAR APUESTAS DE UN SORTEO
-// ══════════════════════════════════════════════════════════
-async function settleDrawBets(db, drawId, winnerNumber, winnerAnimal) {
-  const tickets = db.collection('tickets');
-  const users = db.collection('users');
-
-  const pendingTickets = await tickets.find({ drawId, status: 'pending' }).toArray();
-  let totalSettled = 0;
-
-  for (const ticket of pendingTickets) {
-    const updatedBets = ticket.bets.map(b => {
-      const isW = b.animal === winnerAnimal || b.number === winnerNumber;
-      return { ...b, won: isW, prize: isW ? b.amount * BET_CONFIG.multiplier : 0, status: 'settled' };
-    });
-    const totalPrize = updatedBets.reduce((s, b) => s + (b.prize || 0), 0);
-    const won = totalPrize > 0;
-
-    await tickets.updateOne(
-      { _id: ticket._id },
-      { $set: { bets: updatedBets, status: won ? 'won' : 'lost', totalPrize, settledAt: new Date() } }
-    );
-
-    if (won) {
-      await users.updateOne(
-        { telegramId: ticket.telegramId },
-        { $inc: { balance: totalPrize, totalWins: 1 } }
-      );
-      const timeStr = drawId.split('-').slice(-1)[0];
-      const gameName = drawId.startsWith('flash') ? '⚡ Flash Lotto' : '🎰 Lotto Activo';
-      await notifyUser(
-        ticket.telegramId,
-        `🎉 *¡GANASTE!* — ${gameName} ${timeStr.slice(0,2)}:${timeStr.slice(2,4)}\n\n` +
-        `🐾 Salió: *${winnerAnimal}* \\#${winnerNumber}\n` +
-        `💰 Premio: *+${totalPrize.toLocaleString()} 🥬*\n\n` +
-        `¡Felicidades! 🏆`
-      );
-    }
-    totalSettled++;
-  }
-
-  await db.collection('draw_limits').deleteMany({ drawId });
-  return totalSettled;
-}
-
-// ══════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ══════════════════════════════════════════════════════════
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Content-Type', 'application/json');
-
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Solo POST' });
-  if (!uri) return res.status(500).json({ error: 'MONGODB_URI no configurado' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
-  let client;
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { return res.status(400).json({ error: 'JSON inválido' }); }
+  }
+
+  const { action, telegramId, username } = body || {};
+  if (!action) return res.status(400).json({ error: 'Falta action' });
+
+  let client, db;
   try {
     client = await getClient();
+    db = client.db('animalito_db');
   } catch (err) {
-    return res.status(500).json({ error: 'MongoDB: ' + err.message });
+    return res.status(500).json({ error: 'Error DB: ' + err.message });
   }
 
-  const db = client.db('animalito_db');
-  const users = db.collection('users');
-  const tickets = db.collection('tickets');
-  const withdrawals = db.collection('withdrawals');
-  const drawResults = db.collection('draw_results');
-  const drawLimits = db.collection('draw_limits');
-  const flashResults = db.collection('flash_results');
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: load — Cargar o crear usuario
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'load') {
+    try {
+      const { refCode } = body;
+      const users = db.collection('users');
+      let user = await users.findOne({ telegramId });
+      let isNew = false;
 
-  const body = req.body || {};
-  const { telegramId, username, action } = body;
-
-  if (!telegramId) return res.status(400).json({ error: 'telegramId requerido' });
-  const tid = String(telegramId);
-
-  try {
-    // ══════════════════════════════════════════════════════
-    // CARGAR o CREAR USUARIO
-    // ══════════════════════════════════════════════════════
-    if (!action || action === 'load') {
-      let user = await users.findOne({ telegramId: tid });
       if (!user) {
-        // Generar código de referido único
-        const referralCode = `REF${tid.slice(-6)}${Math.random().toString(36).slice(-3).toUpperCase()}`;
-        const newUser = {
-          telegramId: tid,
+        isNew = true;
+        const myRefCode = genRefCode(telegramId);
+        let referredBy = null;
+
+        // Procesar referido
+        if (refCode && refCode.startsWith('REF')) {
+          const referrer = await users.findOne({ referralCode: refCode });
+          if (referrer && referrer.telegramId !== telegramId) {
+            referredBy = referrer.telegramId;
+            // Bonus para el invitador
+            await users.updateOne(
+              { telegramId: referrer.telegramId },
+              { $inc: { balance: 500, referralCount: 1 } }
+            );
+            await notifyUser(referrer.telegramId,
+              `🎉 *¡Nuevo referido!* ${username || 'Alguien'} se unió con tu link.\n+500 🥬 acreditados!`);
+          }
+        }
+
+        user = {
+          telegramId,
           username: username || 'Usuario',
-          balance: 1000,
+          balance: 1000 + (refCode && refCode.startsWith('REF') ? 200 : 0), // +200 si vino referido
           completedTasks: [],
           lastDailyBonus: null,
-          totalBets: 0,
-          totalWins: 0,
           walletAddress: null,
           tonWalletAddress: null,
-          referralCode,
-          referredBy: null,
+          referralCode: myRefCode,
+          referredBy,
           referralCount: 0,
           referralEarnings: 0,
           pendingReferralBonus: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: new Date().toISOString(),
         };
+        await users.insertOne(user);
+        await notify(`🆕 Nuevo usuario: *${username}* (${telegramId})`);
+      } else {
+        // Actualizar username si cambió
+        if (username && user.username !== username) {
+          await users.updateOne({ telegramId }, { $set: { username } });
+          user.username = username;
+        }
+        // Asegurar que tenga referralCode
+        if (!user.referralCode) {
+          const myRefCode = genRefCode(telegramId);
+          await users.updateOne({ telegramId }, { $set: { referralCode: myRefCode } });
+          user.referralCode = myRefCode;
+        }
+      }
 
-        // Procesar referido (si llegó con refCode)
-        const { refCode } = body;
-        if (refCode && refCode !== tid) {
-          const referrer = await users.findOne({
-            $or: [{ referralCode: refCode }, { telegramId: String(refCode) }]
-          });
-          if (referrer && referrer.telegramId !== tid) {
-            newUser.referredBy = referrer.telegramId;
-            newUser.balance += 200; // bonus al invitado: +200 🥬 extra
-            // Darle bonus pendiente al que invitó: +500 🥬
-            await users.updateOne(
-              { telegramId: referrer.telegramId },
-              {
-                $inc: {
-                  referralCount: 1,
-                  referralEarnings: 500,
-                  pendingReferralBonus: 500,
-                },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            await notifyUser(
-              referrer.telegramId,
-              `👥 *¡Nuevo referido!*\n\n` +
-              `Tu amigo @${username || 'usuario'} se unió con tu enlace\n` +
-              `💰 Ganaste *+500 🥬*\n` +
-              `(Ve a Amigos → Reclamar para acreditarlo)`
-            );
+      return res.status(200).json({ success: true, user, isNew });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error load: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: getDraws — Obtener sorteos por fecha y juego
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'getDraws') {
+    try {
+      const { date, game } = body;
+      const targetDate = date || vzDateStr();
+      const gameType = game || 'lotto';
+
+      const drawResults = db.collection('draw_results');
+
+      if (gameType === 'flash') {
+        // Generar todos los slots Flash del día
+        const allFlash = getFlashDrawsForDate(targetDate);
+        // Buscar resultados ya resueltos
+        const resolved = await drawResults.find({
+          date: targetDate, game: 'flash'
+        }).toArray();
+        const resolvedMap = {};
+        resolved.forEach(r => { resolvedMap[r.drawId] = r; });
+
+        // Marcar estado de cada sorteo
+        const nowISO = new Date().toISOString();
+        const draws = allFlash.map(d => {
+          if (resolvedMap[d.drawId]) {
+            return {
+              ...d,
+              status: 'finished',
+              winnerNumber: resolvedMap[d.drawId].winnerNumber,
+              winnerAnimal: resolvedMap[d.drawId].winnerAnimal,
+            };
           }
+          if (d.closeTime < nowISO) return { ...d, status: 'closed' };
+          return d;
+        });
+
+        return res.status(200).json({ success: true, draws, date: targetDate });
+      }
+
+      // Lotto normal
+      const allLotto = getLottoDrawsForDate(targetDate);
+      const resolved = await drawResults.find({
+        date: targetDate, game: { $ne: 'flash' }
+      }).toArray();
+      const resolvedMap = {};
+      resolved.forEach(r => { resolvedMap[r.drawId] = r; });
+
+      const nowISO = new Date().toISOString();
+      const draws = allLotto.map(d => {
+        if (resolvedMap[d.drawId]) {
+          return {
+            ...d,
+            status: 'finished',
+            winnerNumber: resolvedMap[d.drawId].winnerNumber,
+            winnerAnimal: resolvedMap[d.drawId].winnerAnimal,
+          };
         }
-
-        await users.insertOne(newUser);
-        await notify(`🆕 Nuevo usuario: @${username || 'sin\\_username'} (ID: ${tid})`);
-        return res.status(200).json({ success: true, user: newUser, isNew: true });
-      }
-      // Asegurarse que tenga código de referido
-      if (!user.referralCode) {
-        const referralCode = `REF${tid.slice(-6)}${Math.random().toString(36).slice(-3).toUpperCase()}`;
-        await users.updateOne({ telegramId: tid }, { $set: { referralCode } });
-        user.referralCode = referralCode;
-      }
-      return res.status(200).json({ success: true, user });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // OBTENER WALLET DEL ADMIN
-    // ══════════════════════════════════════════════════════
-    if (action === 'getAdminWallet') {
-      const wallet = process.env.ADMIN_TON_WALLET || 'No configurada';
-      return res.status(200).json({ success: true, wallet });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // GUARDAR TON WALLET DEL USUARIO (desde TON Connect)
-    // ══════════════════════════════════════════════════════
-    if (action === 'saveTonWallet') {
-      const { tonAddress } = body;
-      if (!tonAddress) return res.status(400).json({ error: 'tonAddress requerido' });
-
-      await users.updateOne(
-        { telegramId: tid },
-        { $set: { tonWalletAddress: tonAddress, updatedAt: new Date() } }
-      );
-      return res.status(200).json({ success: true, message: 'Wallet TON guardada' });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // DEPÓSITO TON — confirmar transacción
-    // ══════════════════════════════════════════════════════
-    if (action === 'confirmDeposit') {
-      const { txHash, tonAmount, lechugas } = body;
-      if (!txHash || !tonAmount || !lechugas) {
-        return res.status(400).json({ error: 'txHash, tonAmount y lechugas requeridos' });
-      }
-
-      // Verificar que no se haya procesado ya
-      const existing = await users.findOne({ 'deposits.txHash': txHash });
-      if (existing) {
-        return res.status(400).json({ error: 'Esta transacción ya fue procesada' });
-      }
-
-      const user = await users.findOne({ telegramId: tid });
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      const newBalance = (user.balance || 0) + Number(lechugas);
-      await users.updateOne(
-        { telegramId: tid },
-        {
-          $set: { balance: newBalance, updatedAt: new Date() },
-          $push: {
-            deposits: {
-              txHash,
-              tonAmount: Number(tonAmount),
-              lechugas: Number(lechugas),
-              createdAt: new Date(),
-              status: 'confirmed',
-            }
-          }
-        }
-      );
-
-      await notify(
-        `💰 *Depósito confirmado*\n` +
-        `👤 @${username || tid}\n` +
-        `💎 ${tonAmount} TON → +${Number(lechugas).toLocaleString()} 🥬\n` +
-        `🔗 TX: \`${txHash.slice(0,16)}...\``
-      );
-
-      return res.status(200).json({ success: true, newBalance });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // COMPLETAR TAREA
-    // ══════════════════════════════════════════════════════
-    if (action === 'task') {
-      const { taskId, reward } = body;
-      if (!taskId || !reward) return res.status(400).json({ error: 'taskId y reward requeridos' });
-
-      const user = await users.findOne({ telegramId: tid });
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      if (taskId === 'daily') {
-        const last = user.lastDailyBonus ? new Date(user.lastDailyBonus) : null;
-        const now = new Date();
-        if (last && (now - last) < 24 * 60 * 60 * 1000) {
-          const remaining = Math.ceil((24 * 60 * 60 * 1000 - (now - last)) / (60 * 60 * 1000));
-          return res.status(400).json({ error: `Bono disponible en ${remaining}h` });
-        }
-        const newBalance = (user.balance || 0) + Number(reward);
-        await users.updateOne(
-          { telegramId: tid },
-          { $set: { balance: newBalance, lastDailyBonus: new Date(), updatedAt: new Date() } }
-        );
-        return res.status(200).json({ success: true, newBalance });
-      }
-
-      if (user.completedTasks?.includes(taskId)) {
-        return res.status(400).json({ error: 'Tarea ya completada' });
-      }
-
-      const newBalance = (user.balance || 0) + Number(reward);
-      await users.updateOne(
-        { telegramId: tid },
-        {
-          $set: { balance: newBalance, updatedAt: new Date() },
-          $addToSet: { completedTasks: taskId },
-        }
-      );
-      return res.status(200).json({ success: true, newBalance });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // GUARDAR WALLET (dirección manual)
-    // ══════════════════════════════════════════════════════
-    if (action === 'wallet') {
-      const { walletAddress } = body;
-      if (!walletAddress) return res.status(400).json({ error: 'walletAddress requerido' });
-      await users.updateOne(
-        { telegramId: tid },
-        { $set: { walletAddress: walletAddress.trim(), updatedAt: new Date() } }
-      );
-      return res.status(200).json({ success: true });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // SOLICITAR RETIRO
-    // ══════════════════════════════════════════════════════
-    if (action === 'withdraw') {
-      const { withdrawAmount, walletAddress } = body;
-      if (!withdrawAmount || !walletAddress) {
-        return res.status(400).json({ error: 'withdrawAmount y walletAddress requeridos' });
-      }
-
-      const user = await users.findOne({ telegramId: tid });
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-      const lechugas = Math.round(withdrawAmount * 1000);
-      if (user.balance < lechugas) {
-        return res.status(400).json({ error: 'Saldo insuficiente' });
-      }
-
-      const newBalance = user.balance - lechugas;
-      const withdrawId = `W${Date.now()}`;
-
-      await users.updateOne(
-        { telegramId: tid },
-        { $set: { balance: newBalance, updatedAt: new Date() } }
-      );
-
-      await withdrawals.insertOne({
-        withdrawId,
-        telegramId: tid,
-        username: username || 'usuario',
-        tonAmount: withdrawAmount,
-        lechugas,
-        walletAddress: walletAddress.trim(),
-        status: 'pending',
-        createdAt: new Date(),
+        if (d.closeTime < nowISO) return { ...d, status: 'closed' };
+        return d;
       });
 
-      await notify(
-        `💸 *Solicitud de retiro*\n` +
-        `👤 @${username || tid}\n` +
-        `💎 ${withdrawAmount} TON\n` +
-        `👛 \`${walletAddress.trim()}\`\n` +
-        `🆔 ${withdrawId}`
-      );
-
-      return res.status(200).json({ success: true, newBalance, withdrawId });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // OBTENER SORTEOS (LOTTO o FLASH) — con soporte de días
-    // ══════════════════════════════════════════════════════
-    if (action === 'getDraws') {
-      const { game, date } = body;
-      const now = vzNow();
-      const todayStr = vzDateStr(now);
-      const targetDate = date || todayStr;
-
-      let draws = [];
-
-      if (game === 'flash') {
-        draws = generateFlashDraws(targetDate);
-        
-        // Enriquecer con resultados de la BD
-        const existingResults = await flashResults.find({ date: targetDate }).toArray();
-        const resultsMap = {};
-        for (const r of existingResults) {
-          resultsMap[r.drawId] = r;
-        }
-
-        draws = draws.map(d => {
-          const result = resultsMap[d.drawId];
-          if (result) {
-            return {
-              ...d,
-              status: 'done',
-              winnerNumber: result.winnerNumber,
-              winnerAnimal: result.winnerAnimal,
-            };
-          }
-          // Si ya pasó el tiempo pero no hay resultado, generar automáticamente
-          if (d.status === 'drawing' || (d.status === 'upcoming' && new Date() > new Date(d.resultTime))) {
-            return { ...d, status: 'done' };
-          }
-          return d;
-        });
-
-        // Mostrar solo los últimos 12 sorteos pasados + los próximos 6
-        const pastDraws = draws.filter(d => d.status === 'done').slice(-12);
-        const activeDraws = draws.filter(d => ['open','closed','drawing'].includes(d.status));
-        const upcomingDraws = draws.filter(d => d.status === 'upcoming').slice(0, 6);
-        draws = [...pastDraws, ...activeDraws, ...upcomingDraws];
-
-      } else {
-        // Lotto Activo
-        draws = generateLottoDraws(targetDate);
-
-        // Enriquecer con resultados de la BD
-        const existingResults = await drawResults.find({ date: targetDate, game: { $ne: 'flash' } }).toArray();
-        const resultsMap = {};
-        for (const r of existingResults) {
-          resultsMap[r.drawId] = r;
-        }
-
-        draws = draws.map(d => {
-          const result = resultsMap[d.drawId];
-          if (result) {
-            return {
-              ...d,
-              status: 'done',
-              winnerNumber: result.winnerNumber,
-              winnerAnimal: result.winnerAnimal,
-            };
-          }
-          return d;
-        });
-      }
-
       return res.status(200).json({ success: true, draws, date: targetDate });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error getDraws: ' + err.message });
     }
+  }
 
-    // ══════════════════════════════════════════════════════
-    // OBTENER SEMANA PASADA — resultados históricos
-    // ══════════════════════════════════════════════════════
-    if (action === 'getWeekHistory') {
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: getWeekResults — Últimos 7 días de resultados
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'getWeekResults') {
+    try {
       const { game } = body;
+      const gameType = game || 'lotto';
+      const drawResults = db.collection('draw_results');
+      const days = [];
       const now = vzNow();
-      const results = [];
-
-      for (let i = 1; i <= 7; i++) {
+      for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
-        const dateStr = vzDateStr(d);
+        days.push(vzDateStr(d));
+      }
 
-        if (game === 'flash') {
-          const dayResults = await flashResults.find({ date: dateStr }).sort({ drawId: 1 }).toArray();
-          results.push({ date: dateStr, results: dayResults });
-        } else {
-          const dayResults = await drawResults.find({ date: dateStr, game: { $ne: 'flash' } }).sort({ drawId: 1 }).toArray();
-          results.push({ date: dateStr, results: dayResults });
+      const results = await drawResults.find({
+        date: { $in: days },
+        game: gameType === 'flash' ? 'flash' : { $ne: 'flash' },
+      }).sort({ date: 1, time: 1 }).toArray();
+
+      const byDay = {};
+      days.forEach(d => { byDay[d] = []; });
+      results.forEach(r => {
+        if (byDay[r.date]) {
+          byDay[r.date].push({
+            drawId: r.drawId,
+            winnerNumber: r.winnerNumber,
+            winnerAnimal: r.winnerAnimal,
+            time: r.time,
+          });
+        }
+      });
+
+      const weekData = days.map(date => ({
+        date,
+        results: byDay[date],
+      }));
+
+      return res.status(200).json({ success: true, weekData });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error getWeekResults: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: bet — Realizar apuesta
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'bet') {
+    try {
+      const { drawId, drawGame, bets, date } = body;
+      if (!drawId || !bets || !Array.isArray(bets) || bets.length === 0) {
+        return res.status(400).json({ error: 'Datos de apuesta inválidos' });
+      }
+
+      // Verificar que el sorteo no esté cerrado
+      const now = new Date();
+      const gameType = drawGame || 'lotto';
+
+      // Para lotto: verificar hora de cierre
+      if (gameType === 'lotto') {
+        const parts = drawId.split('-');
+        const hourStr = parts[parts.length - 1];
+        const drawHour = parseInt(hourStr, 10);
+        const vzNowTime = vzNow();
+        const vzDateTarget = parts.slice(1, 4).join('-');
+        const todayVZ = vzDateStr(vzNowTime);
+
+        if (vzDateTarget < todayVZ) {
+          return res.status(400).json({ error: 'Este sorteo ya pasó' });
+        }
+        if (vzDateTarget === todayVZ && vzNowTime.getHours() >= drawHour) {
+          return res.status(400).json({ error: 'Las apuestas para este sorteo ya están cerradas' });
         }
       }
 
-      return res.status(200).json({ success: true, history: results });
-    }
+      // Para flash: verificar que no esté cerrado
+      if (gameType === 'flash') {
+        // El drawId es flash-YYYY-MM-DD-HHmm
+        const parts = drawId.split('-');
+        const timeCode = parts[parts.length - 1]; // HHmm
+        const dateCode = parts.slice(1, 4).join('-'); // YYYY-MM-DD
+        const drawHour = parseInt(timeCode.slice(0, 2), 10);
+        const drawMin = parseInt(timeCode.slice(2, 4), 10);
+        const vzNowTime = vzNow();
+        const todayVZ = vzDateStr(vzNowTime);
 
-    // ══════════════════════════════════════════════════════
-    // OBTENER LÍMITES DE UN SORTEO
-    // ══════════════════════════════════════════════════════
-    if (action === 'getDrawLimits') {
-      const { drawId } = body;
-      if (!drawId) return res.status(400).json({ error: 'drawId requerido' });
-
-      const limits = await drawLimits.find({ drawId }).toArray();
-      const limitsMap = {};
-      for (const l of limits) {
-        limitsMap[l.animal] = {
-          total: l.totalBet || 0,
-          remaining: Math.max(0, BET_CONFIG.maxBetGlobal - (l.totalBet || 0)),
-          isFull: (l.totalBet || 0) >= BET_CONFIG.maxBetGlobal,
-        };
-      }
-      return res.status(200).json({ success: true, limits: limitsMap });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // COLOCAR APUESTA
-    // ══════════════════════════════════════════════════════
-    if (action === 'placeBet') {
-      const { drawId, drawGame, bets } = body;
-      if (!drawId || !bets?.length) {
-        return res.status(400).json({ error: 'drawId y bets requeridos' });
+        if (dateCode < todayVZ) {
+          return res.status(400).json({ error: 'Este sorteo Flash ya pasó' });
+        }
+        if (dateCode === todayVZ) {
+          const nowMinutes = vzNowTime.getHours() * 60 + vzNowTime.getMinutes();
+          const closeMinutes = drawHour * 60 + drawMin;
+          if (nowMinutes >= closeMinutes) {
+            return res.status(400).json({ error: 'Las apuestas para este Flash Lotto están cerradas' });
+          }
+        }
       }
 
-      const user = await users.findOne({ telegramId: tid });
+      const users = db.collection('users');
+      const tickets = db.collection('tickets');
+
+      const user = await users.findOne({ telegramId });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-      const now = new Date();
-      const totalBet = bets.reduce((s, b) => s + Number(b.amount), 0);
-
-      // Verificar estado del sorteo
-      const isFlash = drawGame === 'flash';
-      let drawStatusOk = false;
-
-      if (isFlash) {
-        // Para flash: extraer hora del drawId y verificar tiempo
-        const parts = drawId.split('-');
-        const timeStr = parts[parts.length - 1];
-        const h = parseInt(timeStr.slice(0, 2));
-        const m = parseInt(timeStr.slice(2, 4));
-        const dateStr = parts.slice(1, 4).join('-');
-        const drawTime = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
-        const drawTimeUTC = new Date(drawTime.getTime() + 4 * 60 * 60 * 1000);
-        const closeTimeUTC = new Date(drawTimeUTC.getTime() - 2 * 60 * 1000);
-        drawStatusOk = now < closeTimeUTC;
-      } else {
-        // Para lotto: extraer hora y verificar
-        const parts = drawId.split('-');
-        const timeStr = parts[parts.length - 1];
-        const h = parseInt(timeStr.slice(0, 2));
-        const m = parseInt(timeStr.slice(2, 4));
-        const dateStr = parts.slice(1, 4).join('-');
-        const drawTime = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`);
-        const drawTimeUTC = new Date(drawTime.getTime() + 4 * 60 * 60 * 1000);
-        const closeTimeUTC = new Date(drawTimeUTC.getTime() - 10 * 60 * 1000);
-        drawStatusOk = now < closeTimeUTC;
+      const totalBet = bets.reduce((s, b) => s + (b.amount || 0), 0);
+      if (totalBet < BET_CONFIG.minBet) {
+        return res.status(400).json({ error: `Mínimo de apuesta: ${BET_CONFIG.minBet} 🥬` });
       }
-
-      if (!drawStatusOk) {
-        return res.status(400).json({ error: 'Las apuestas para este sorteo están cerradas' });
-      }
-
       if (user.balance < totalBet) {
         return res.status(400).json({ error: 'Saldo insuficiente' });
       }
 
-      // Validar montos
-      for (const bet of bets) {
-        if (bet.amount < BET_CONFIG.minBet) {
-          return res.status(400).json({ error: `Monto mínimo por animal: ${BET_CONFIG.minBet} 🥬` });
-        }
-        if (bet.amount > BET_CONFIG.maxBetPerUser) {
-          return res.status(400).json({ error: `Monto máximo por animal: ${BET_CONFIG.maxBetPerUser} 🥬` });
-        }
-
-        // Verificar límites globales
-        const limitDoc = await drawLimits.findOne({ drawId, animal: bet.animal });
-        const currentTotal = limitDoc?.totalBet || 0;
-        if (currentTotal + bet.amount > BET_CONFIG.maxBetGlobal) {
-          return res.status(400).json({ error: `Límite global alcanzado para ${bet.animal}` });
-        }
-
-        await drawLimits.updateOne(
-          { drawId, animal: bet.animal },
-          { $inc: { totalBet: bet.amount } },
-          { upsert: true }
-        );
+      // Validar montos individuales
+      for (const b of bets) {
+        if (!b.number && b.number !== 0) return res.status(400).json({ error: 'Número inválido en apuesta' });
+        if (!b.amount || b.amount < 50) return res.status(400).json({ error: 'Monto mínimo 50 🥬 por animal' });
+        if (b.amount > BET_CONFIG.maxBetPerUser) return res.status(400).json({ error: `Máximo ${BET_CONFIG.maxBetPerUser} 🥬 por animal` });
       }
 
+      // Descontar saldo
       const newBalance = user.balance - totalBet;
-      const ticketId = `T${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      await users.updateOne({ telegramId }, { $set: { balance: newBalance } });
 
+      // Comisión de referido (5%)
+      if (user.referredBy) {
+        const commission = Math.floor(totalBet * 0.05);
+        if (commission > 0) {
+          await users.updateOne(
+            { telegramId: user.referredBy },
+            { $inc: { referralEarnings: commission, balance: commission } }
+          );
+        }
+      }
+
+      // Crear ticket
+      const ticketId = `TK-${Date.now()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`;
       const ticket = {
         ticketId,
-        telegramId: tid,
-        username: username || 'usuario',
+        telegramId,
+        username: user.username,
         drawId,
-        drawGame: drawGame || 'lotto',
+        drawGame: gameType,
+        date: date || vzDateStr(),
         bets: bets.map(b => ({
-          animal: b.animal,
           number: b.number,
-          amount: Number(b.amount),
+          animal: ANIMALS_MAP[b.number] || `Nº${b.number}`,
+          amount: b.amount,
           won: null,
           prize: null,
           status: 'pending',
@@ -712,293 +459,336 @@ export default async function handler(req, res) {
         betsCount: bets.length,
         status: 'pending',
         totalPrize: 0,
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
       };
-
       await tickets.insertOne(ticket);
-      await users.updateOne(
-        { telegramId: tid },
-        { $set: { balance: newBalance, updatedAt: new Date() }, $inc: { totalBets: 1 } }
+
+      // Para Flash: auto-resolver cuando llegue la hora (se llama desde frontend)
+      await notify(
+        `🎫 *Nueva apuesta* (${gameType === 'flash' ? '⚡Flash' : '🎰Lotto'})\n` +
+        `👤 ${user.username} | 💰 ${totalBet} 🥬\n` +
+        `🎯 ${bets.map(b => `${ANIMALS_MAP[b.number]}(${b.amount})`).join(', ')}\n` +
+        `🎲 Sorteo: ${drawId}`
       );
 
-      // ── Comisión de referido: 5% al que invitó ────────────
-      const betterUser = await users.findOne({ telegramId: tid });
-      if (betterUser?.referredBy) {
-        const commission = Math.floor(totalBet * 0.05);
-        if (commission > 0) {
+      return res.status(200).json({
+        success: true,
+        newBalance,
+        ticketId,
+        message: `✅ Apuesta registrada! Ticket: ${ticketId}`,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error bet: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: resolveFlash — Resolver un sorteo Flash (llamado desde frontend)
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'resolveFlash') {
+    try {
+      const { drawId } = body;
+      if (!drawId) return res.status(400).json({ error: 'Falta drawId' });
+
+      const drawResults = db.collection('draw_results');
+      const tickets = db.collection('tickets');
+      const users = db.collection('users');
+
+      // Verificar si ya está resuelto
+      const existing = await drawResults.findOne({ drawId });
+      if (existing) {
+        return res.status(200).json({
+          success: true,
+          alreadyResolved: true,
+          winnerNumber: existing.winnerNumber,
+          winnerAnimal: existing.winnerAnimal,
+        });
+      }
+
+      // Verificar que la hora ya pasó
+      const parts = drawId.split('-');
+      const timeCode = parts[parts.length - 1];
+      const dateCode = parts.slice(1, 4).join('-');
+      const drawHour = parseInt(timeCode.slice(0, 2), 10);
+      const drawMin = parseInt(timeCode.slice(2, 4), 10);
+      const vzNowTime = vzNow();
+      const todayVZ = vzDateStr(vzNowTime);
+
+      if (dateCode === todayVZ) {
+        const nowMinutes = vzNowTime.getHours() * 60 + vzNowTime.getMinutes();
+        const closeMinutes = drawHour * 60 + drawMin;
+        if (nowMinutes < closeMinutes + 2) {
+          return res.status(200).json({ success: false, message: 'Sorteo aún no cerrado' });
+        }
+      }
+
+      // Resultado aleatorio
+      const animalNumbers = Object.keys(ANIMALS_MAP).map(Number);
+      const winnerNumber = animalNumbers[Math.floor(Math.random() * animalNumbers.length)];
+      const winnerAnimal = ANIMALS_MAP[winnerNumber];
+      const timeStr = `${String(drawHour > 12 ? drawHour - 12 : drawHour).padStart(2,'0')}:${String(drawMin).padStart(2,'0')} ${drawHour < 12 ? 'AM' : 'PM'}`;
+
+      // Guardar resultado
+      await drawResults.insertOne({
+        drawId, date: dateCode, game: 'flash', time: timeStr,
+        winnerNumber, winnerAnimal,
+        resolvedAt: new Date().toISOString(),
+      });
+
+      // Resolver tickets
+      const pendingTickets = await tickets.find({ drawId, status: 'pending' }).toArray();
+      let totalWinners = 0;
+
+      for (const ticket of pendingTickets) {
+        let totalPrize = 0;
+        const updatedBets = ticket.bets.map(b => {
+          const won = b.number === winnerNumber;
+          const prize = won ? b.amount * BET_CONFIG.multiplier : 0;
+          totalPrize += prize;
+          return { ...b, won, prize, status: 'resolved' };
+        });
+
+        await tickets.updateOne(
+          { ticketId: ticket.ticketId },
+          { $set: { bets: updatedBets, totalPrize, status: 'resolved' } }
+        );
+
+        if (totalPrize > 0) {
+          totalWinners++;
           await users.updateOne(
-            { telegramId: betterUser.referredBy },
-            {
-              $inc: {
-                referralEarnings: commission,
-                pendingReferralBonus: commission,
-              },
-              $set: { updatedAt: new Date() },
-            }
+            { telegramId: ticket.telegramId },
+            { $inc: { balance: totalPrize } }
+          );
+          await notifyUser(ticket.telegramId,
+            `⚡ *Flash Lotto ${timeStr}*\n🎉 ¡GANASTE! +${totalPrize} 🥬\nAnimal: ${winnerAnimal} (${winnerNumber})`
+          );
+        } else {
+          await notifyUser(ticket.telegramId,
+            `⚡ *Flash Lotto ${timeStr}*\nResultado: ${winnerAnimal} (${winnerNumber})\nNo ganaste esta vez 💪`
           );
         }
       }
 
-      return res.status(200).json({ success: true, ticket, newBalance });
+      await notify(
+        `⚡ *Flash Lotto resuelto*\n🎲 ${drawId}\n🏆 Ganador: ${winnerAnimal} (${winnerNumber})\n` +
+        `🎫 Tickets: ${pendingTickets.length} | Ganadores: ${totalWinners}`
+      );
+
+      return res.status(200).json({
+        success: true, drawId, winnerNumber, winnerAnimal,
+        ticketsResolved: pendingTickets.length, winners: totalWinners,
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error resolveFlash: ' + err.message });
     }
+  }
 
-    // ══════════════════════════════════════════════════════
-    // OBTENER MIS TICKETS
-    // ══════════════════════════════════════════════════════
-    if (action === 'getTickets') {
-      const { game } = body;
-      const query = { telegramId: tid };
-      if (game) query.drawGame = game;
-
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: getTickets — Tickets del usuario
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'getTickets') {
+    try {
+      const { limit: lim } = body;
+      const tickets = db.collection('tickets');
       const myTickets = await tickets
-        .find(query)
+        .find({ telegramId })
         .sort({ createdAt: -1 })
-        .limit(50)
+        .limit(lim || 20)
         .toArray();
       return res.status(200).json({ success: true, tickets: myTickets });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error getTickets: ' + err.message });
     }
+  }
 
-    // ══════════════════════════════════════════════════════
-    // RESOLVER FLASH LOTTO — generar resultado aleatorio
-    // ══════════════════════════════════════════════════════
-    if (action === 'resolveFlash') {
-      const cronKey = process.env.CRON_SECRET;
-      if (body.cronKey !== cronKey) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      const { drawId } = body;
-      if (!drawId) return res.status(400).json({ error: 'drawId requerido' });
-
-      // Verificar que no se haya resuelto ya
-      const existing = await flashResults.findOne({ drawId });
-      if (existing) {
-        return res.status(200).json({ success: true, already: true, result: existing });
-      }
-
-      // Generar resultado aleatorio
-      const winnerNumber = Math.floor(Math.random() * 37); // 0-36
-      const winnerAnimal = ANIMALS_MAP[winnerNumber];
-      const parts = drawId.split('-');
-      const dateStr = parts.slice(1, 4).join('-');
-
-      const result = {
-        drawId,
-        game: 'flash',
-        date: dateStr,
-        winnerNumber,
-        winnerAnimal,
-        resolvedAt: new Date(),
-        method: 'random',
-      };
-
-      await flashResults.insertOne(result);
-
-      // Pagar ganadores
-      const settled = await settleDrawBets(db, drawId, winnerNumber, winnerAnimal);
-
-      await notify(
-        `⚡ *Flash Lotto* — ${drawId}\n` +
-        `🐾 Ganador: *${winnerAnimal}* \\#${winnerNumber}\n` +
-        `🎫 Tickets resueltos: ${settled}`
-      );
-
-      return res.status(200).json({ success: true, result, settled });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // SCRAPE RESULTADOS LOTTO ACTIVO
-    // ══════════════════════════════════════════════════════
-    if (action === 'scrapeResults') {
-      const cronKey = process.env.CRON_SECRET;
-      if (body.cronKey !== cronKey) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      const { targetHour, targetGame } = body;
-      const now = vzNow();
-      const dateStr = vzDateStr(now);
-      const hour = targetHour ?? now.getHours();
-
-      const drawId = `lotto-${dateStr}-${String(hour).padStart(2,'0')}00`;
-
-      // Verificar si ya existe resultado
-      const existing = await drawResults.findOne({ drawId });
-      if (existing) {
-        return res.status(200).json({ success: true, already: true, results: { lotto: existing } });
-      }
-
-      // Intentar scrape de resultados oficiales
-      let winnerNumber = null;
-      let winnerAnimal = null;
-
-      try {
-        const resp = await fetch('https://animalitos.net/resultados', {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(10000),
-        });
-        if (resp.ok) {
-          const html = await resp.text();
-          // Buscar patrón de número en resultados (simplificado)
-          const match = html.match(/(\d{1,2})\s*[-–]\s*([A-Za-záéíóúñÁÉÍÓÚÑ\s]+)/);
-          if (match) {
-            const num = parseInt(match[1]);
-            if (num >= 0 && num <= 36 && ANIMALS_MAP[num]) {
-              winnerNumber = num;
-              winnerAnimal = ANIMALS_MAP[num];
-            }
-          }
-        }
-      } catch {
-        // Si falla el scrape, no guardar resultado para que el admin lo ingrese manualmente
-      }
-
-      if (winnerNumber === null) {
-        return res.status(200).json({
-          success: false,
-          message: 'No se pudo obtener resultado. Ingresarlo manualmente.',
-          drawId,
-        });
-      }
-
-      const result = {
-        drawId,
-        game: targetGame || 'lotto',
-        date: dateStr,
-        winnerNumber,
-        winnerAnimal,
-        resolvedAt: new Date(),
-        method: 'scrape',
-      };
-
-      await drawResults.insertOne(result);
-      const settled = await settleDrawBets(db, drawId, winnerNumber, winnerAnimal);
-
-      return res.status(200).json({
-        success: true,
-        results: { lotto: result },
-        settled,
-      });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // ADMIN — Ingresar resultado manualmente
-    // ══════════════════════════════════════════════════════
-    if (action === 'adminSetResult') {
-      const adminKey = process.env.ADMIN_SECRET_KEY;
-      if (body.adminKey !== adminKey) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      const { drawId, winnerNumber, game } = body;
-      if (!drawId || winnerNumber === undefined) {
-        return res.status(400).json({ error: 'drawId y winnerNumber requeridos' });
-      }
-
-      const num = parseInt(winnerNumber);
-      if (isNaN(num) || num < 0 || num > 36) {
-        return res.status(400).json({ error: 'winnerNumber debe ser 0-36' });
-      }
-
-      const winnerAnimal = ANIMALS_MAP[num];
-      const parts = drawId.split('-');
-      const dateStr = parts.slice(1, 4).join('-');
-
-      const isFlash = game === 'flash' || drawId.startsWith('flash');
-      const collection = isFlash ? flashResults : drawResults;
-
-      const existing = await collection.findOne({ drawId });
-      if (existing) {
-        return res.status(400).json({ error: 'Este sorteo ya tiene resultado' });
-      }
-
-      const result = {
-        drawId,
-        game: game || 'lotto',
-        date: dateStr,
-        winnerNumber: num,
-        winnerAnimal,
-        resolvedAt: new Date(),
-        method: 'manual',
-      };
-
-      await collection.insertOne(result);
-      const settled = await settleDrawBets(db, drawId, num, winnerAnimal);
-
-      await notify(
-        `✅ *Resultado manual ingresado*\n` +
-        `🎮 Sorteo: ${drawId}\n` +
-        `🐾 Ganador: *${winnerAnimal}* \\#${num}\n` +
-        `🎫 Tickets resueltos: ${settled}`
-      );
-
-      return res.status(200).json({ success: true, result, settled });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // REFERIDOS — Obtener lista de amigos
-    // ══════════════════════════════════════════════════════
-    if (action === 'getReferrals') {
-      const user = await users.findOne({ telegramId: tid });
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: dailyBonus — Bono diario
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'dailyBonus') {
+    try {
+      const users = db.collection('users');
+      const user = await users.findOne({ telegramId });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-      // Buscar todos los usuarios que fueron referidos por este usuario
-      const referredUsers = await users
-        .find({ referredBy: tid })
-        .sort({ createdAt: -1 })
-        .toArray();
+      const today = vzDateStr();
+      if (user.lastDailyBonus === today) {
+        return res.status(400).json({ error: 'Ya reclamaste el bono de hoy. Vuelve mañana 🌅' });
+      }
 
-      const referralList = await Promise.all(referredUsers.map(async (ru) => {
-        // Contar cuántas apuestas ha hecho el referido
-        const betsCount = await tickets.countDocuments({ telegramId: ru.telegramId });
-        return {
-          telegramId: ru.telegramId,
-          username: ru.username || `Usuario ${ru.telegramId.slice(-4)}`,
-          joinedAt: ru.createdAt?.toISOString() || new Date().toISOString(),
-          earned: 500, // bonus base por referido
-          betsCount,
-        };
-      }));
+      const bonus = 100;
+      const newBalance = user.balance + bonus;
+      await users.updateOne({ telegramId }, {
+        $set: { lastDailyBonus: today, balance: newBalance }
+      });
+
+      return res.status(200).json({ success: true, newBalance, bonus });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error dailyBonus: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: completeTask — Completar tarea
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'completeTask') {
+    try {
+      const { taskId, reward } = body;
+      const users = db.collection('users');
+      const user = await users.findOne({ telegramId });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      if (user.completedTasks?.includes(taskId)) {
+        return res.status(400).json({ error: 'Tarea ya completada' });
+      }
+
+      const newBalance = user.balance + (reward || 0);
+      await users.updateOne({ telegramId }, {
+        $set: { balance: newBalance },
+        $push: { completedTasks: taskId },
+      });
+
+      return res.status(200).json({ success: true, newBalance });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error completeTask: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: deposit — Registrar depósito TON
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'deposit') {
+    try {
+      const { amount, tonAmount, txHash, walletAddress } = body;
+      const users = db.collection('users');
+      const transactions = db.collection('transactions');
+
+      const user = await users.findOne({ telegramId });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      // Verificar que no sea tx duplicada
+      if (txHash) {
+        const existing = await transactions.findOne({ txHash });
+        if (existing) return res.status(400).json({ error: 'Transacción ya procesada' });
+      }
+
+      const leafAmount = amount || Math.floor((tonAmount || 0) * 1000);
+      const newBalance = user.balance + leafAmount;
+
+      await users.updateOne({ telegramId }, {
+        $set: { balance: newBalance, tonWalletAddress: walletAddress || user.tonWalletAddress }
+      });
+
+      await transactions.insertOne({
+        telegramId, type: 'deposit',
+        tonAmount: tonAmount || 0,
+        leafAmount, txHash,
+        walletAddress,
+        createdAt: new Date().toISOString(),
+      });
+
+      await notify(
+        `💰 *Depósito TON*\n👤 ${user.username}\n` +
+        `💎 ${tonAmount || 0} TON → ${leafAmount} 🥬\n` +
+        `🔗 ${txHash || 'sin hash'}`
+      );
+
+      return res.status(200).json({ success: true, newBalance, leafAmount });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error deposit: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: withdraw — Solicitar retiro
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'withdraw') {
+    try {
+      const { leafAmount, walletAddress } = body;
+      const users = db.collection('users');
+      const withdrawals = db.collection('withdrawals');
+
+      if (!walletAddress) return res.status(400).json({ error: 'Falta dirección de wallet' });
+      if (!leafAmount || leafAmount < 1000) return res.status(400).json({ error: 'Mínimo de retiro: 1,000 🥬' });
+
+      const user = await users.findOne({ telegramId });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+      if (user.balance < leafAmount) return res.status(400).json({ error: 'Saldo insuficiente' });
+
+      const tonAmount = leafAmount / 1000;
+      const newBalance = user.balance - leafAmount;
+
+      await users.updateOne({ telegramId }, { $set: { balance: newBalance } });
+      await withdrawals.insertOne({
+        telegramId, username: user.username,
+        leafAmount, tonAmount, walletAddress,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+
+      await notify(
+        `💸 *Solicitud de retiro*\n👤 ${user.username}\n` +
+        `💎 ${leafAmount} 🥬 = ${tonAmount} TON\n` +
+        `📬 ${walletAddress}`
+      );
+
+      return res.status(200).json({ success: true, newBalance, tonAmount });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error withdraw: ' + err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: getReferrals — Info de referidos
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'getReferrals') {
+    try {
+      const users = db.collection('users');
+      const user = await users.findOne({ telegramId });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      // Obtener lista de referidos
+      const referredUsers = await users
+        .find({ referredBy: telegramId })
+        .project({ username: 1, createdAt: 1, balance: 1 })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .toArray();
 
       return res.status(200).json({
         success: true,
-        referrals: referralList,
+        referralCode: user.referralCode || genRefCode(telegramId),
+        referralCount: user.referralCount || 0,
+        referralEarnings: user.referralEarnings || 0,
         pendingBonus: user.pendingReferralBonus || 0,
-        totalEarnings: user.referralEarnings || 0,
+        referredUsers,
       });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error getReferrals: ' + err.message });
     }
+  }
 
-    // ══════════════════════════════════════════════════════
-    // REFERIDOS — Reclamar bonus pendiente
-    // ══════════════════════════════════════════════════════
-    if (action === 'claimReferralBonus') {
-      const user = await users.findOne({ telegramId: tid });
+  // ══════════════════════════════════════════════════════════════
+  // ACTION: claimReferralBonus — Reclamar bonus de referidos
+  // ══════════════════════════════════════════════════════════════
+  if (action === 'claimReferralBonus') {
+    try {
+      const users = db.collection('users');
+      const user = await users.findOne({ telegramId });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
       const pending = user.pendingReferralBonus || 0;
-      if (pending <= 0) {
-        return res.status(400).json({ error: 'No tienes bonos pendientes' });
-      }
+      if (pending <= 0) return res.status(400).json({ error: 'No tienes bonus pendiente' });
 
-      const newBalance = (user.balance || 0) + pending;
-      await users.updateOne(
-        { telegramId: tid },
-        {
-          $set: {
-            balance: newBalance,
-            pendingReferralBonus: 0,
-            updatedAt: new Date(),
-          }
-        }
-      );
+      const newBalance = user.balance + pending;
+      await users.updateOne({ telegramId }, {
+        $set: { balance: newBalance, pendingReferralBonus: 0 }
+      });
 
       return res.status(200).json({ success: true, newBalance, claimed: pending });
+    } catch (err) {
+      return res.status(500).json({ error: 'Error claimReferralBonus: ' + err.message });
     }
-
-    return res.status(400).json({ error: `Acción desconocida: ${action}` });
-
-  } catch (err) {
-    console.error('Handler error:', err);
-    return res.status(500).json({ error: err.message });
   }
+
+  return res.status(400).json({ error: `Acción desconocida: ${action}` });
 }
