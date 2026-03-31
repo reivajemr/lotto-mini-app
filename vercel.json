@@ -14,7 +14,8 @@
     { "path": "/api/scraper", "schedule": "5 20 * * *" },
     { "path": "/api/scraper", "schedule": "5 21 * * *" },
     { "path": "/api/scraper", "schedule": "5 22 * * *" },
-    { "path": "/api/scraper", "schedule": "5 23 * * *" }
+    { "path": "/api/scraper", "schedule": "5 23 * * *" },
+    { "path": "/api/flash", "schedule": "*/5 12-23 * * *" }
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
