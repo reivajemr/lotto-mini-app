@@ -3,6 +3,7 @@ import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import Lobby from './components/Lobby';
 import Wallet from './components/Wallet';
 import Tasks from './components/Tasks';
+import Friends from './components/Friends';
 
 // ── TON Connect manifest URL ─────────────────────────────────
 const MANIFEST_URL = 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json';
@@ -23,7 +24,7 @@ export async function apiCall(body: Record<string, unknown>): Promise<unknown> {
 }
 
 // ── Haptic feedback ──────────────────────────────────────────
-function haptic(type: 'light' | 'medium' | 'heavy' = 'light') {
+export function haptic(type: 'light' | 'medium' | 'heavy' = 'light') {
   try {
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.HapticFeedback) {
@@ -40,9 +41,13 @@ interface User {
   lastDailyBonus: string | null;
   walletAddress: string | null;
   tonWalletAddress: string | null;
+  referralCode?: string;
+  referredBy?: string;
+  referralCount?: number;
+  referralEarnings?: number;
 }
 
-type Tab = 'lobby' | 'wallet' | 'tasks';
+type Tab = 'lobby' | 'wallet' | 'tasks' | 'friends';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -58,16 +63,19 @@ export default function App() {
       const tg = (window as any).Telegram?.WebApp;
       if (tg?.initDataUnsafe?.user) {
         const u = tg.initDataUnsafe.user;
+        // Capturar referido si viene en start_param
+        const refCode = tg.initDataUnsafe?.start_param || null;
         return {
           telegramId: String(u.id),
           username: u.username || u.first_name || 'Usuario',
+          refCode,
         };
       }
     } catch { /* ignorar */ }
-    // Fallback para desarrollo/pruebas
     return {
       telegramId: 'test_' + Math.floor(Math.random() * 100000),
       username: 'TestUser',
+      refCode: null,
     };
   };
 
@@ -94,6 +102,7 @@ export default function App() {
         telegramId: tgUser.telegramId,
         username: tgUser.username,
         action: 'load',
+        refCode: tgUser.refCode,
       }) as { success?: boolean; user?: User; isNew?: boolean; error?: string };
 
       if (data?.success && data.user) {
@@ -107,7 +116,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [tgUser.telegramId, tgUser.username]);
+  }, [tgUser.telegramId, tgUser.username, tgUser.refCode]);
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
@@ -154,6 +163,13 @@ export default function App() {
       </button>
     </div>
   );
+
+  const TABS: { id: Tab; icon: string; label: string }[] = [
+    { id: 'lobby',   icon: '🎰', label: 'Jugar'   },
+    { id: 'wallet',  icon: '💎', label: 'Wallet'  },
+    { id: 'tasks',   icon: '✅', label: 'Tareas'  },
+    { id: 'friends', icon: '👥', label: 'Amigos'  },
+  ];
 
   // ── MAIN APP ───────────────────────────────────────────────
   return (
@@ -217,26 +233,35 @@ export default function App() {
               refreshUser={refreshUser}
             />
           )}
+          {activeTab === 'friends' && (
+            <Friends
+              telegramId={tgUser.telegramId}
+              username={tgUser.username}
+              referralCode={user.referralCode || tgUser.telegramId}
+              referralCount={user.referralCount || 0}
+              referralEarnings={user.referralEarnings || 0}
+              balance={user.balance}
+              onBalanceUpdate={onBalanceUpdate}
+              showAlert={showAlert}
+              haptic={haptic}
+            />
+          )}
         </div>
 
         {/* ── NAVBAR INFERIOR ── */}
-        <div className="flex gap-1 px-2 py-2 bg-black/40 backdrop-blur border-t border-white/5 flex-shrink-0 safe-area-pb">
-          {([
-            { id: 'lobby',  icon: '🎰', label: 'Jugar'  },
-            { id: 'wallet', icon: '💎', label: 'Wallet' },
-            { id: 'tasks',  icon: '✅', label: 'Tareas' },
-          ] as { id: Tab; icon: string; label: string }[]).map(tab => (
+        <div className="flex gap-1 px-2 py-2 bg-black/40 backdrop-blur border-t border-white/5 flex-shrink-0">
+          {TABS.map(tab => (
             <button
               key={tab.id}
               onClick={() => { haptic('light'); setActiveTab(tab.id); }}
-              className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-all ${
+              className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl transition-all ${
                 activeTab === tab.id
                   ? 'bg-teal-500/20 text-teal-300'
                   : 'text-white/40 hover:text-white/70'
               }`}
             >
-              <span className="text-xl">{tab.icon}</span>
-              <span className="text-[10px] font-semibold">{tab.label}</span>
+              <span className="text-lg">{tab.icon}</span>
+              <span className="text-[9px] font-semibold">{tab.label}</span>
             </button>
           ))}
         </div>
