@@ -1,281 +1,297 @@
-import { useState, useEffect, useCallback } from 'react';
-import { TonConnectUIProvider } from '@tonconnect/ui-react';
+import { useEffect, useState, useCallback } from 'react';
 import Lobby from './components/Lobby';
 import Wallet from './components/Wallet';
 import Tasks from './components/Tasks';
-import Friends from './components/Friends';
 
-// ── TON Connect manifest URL ─────────────────────────────────
-const MANIFEST_URL = 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json';
+// ── Tipos ────────────────────────────────────────────────────
+export type Tab = 'lobby' | 'wallet' | 'tasks';
 
-// ── API helper ───────────────────────────────────────────────
+export interface User {
+  telegramId: string;
+  username: string;
+  balance: number;
+  completedTasks: string[];
+  lastDailyBonus: string | null;
+  totalBets: number;
+  totalWins: number;
+  walletAddress: string | null;
+  createdAt: string;
+}
+
+// ── DEV fallback (cuando no corre dentro de Telegram) ────────
+const DEV_USER = {
+  id: 999999999,
+  first_name: 'Jugador',
+  username: 'dev_user',
+};
+
+// ── Helper para llamadas al API con manejo de errores robusto ─
 export async function apiCall(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch('/api/user', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
   const text = await res.text();
+
+  // Intentar parsear como JSON
+  let data: unknown;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
-    throw new Error(text.slice(0, 120));
+    // Si no es JSON, es un error del servidor (HTML, etc.)
+    console.error('Respuesta no-JSON del servidor:', text.slice(0, 200));
+    throw new Error(`Error del servidor (${res.status}): ${text.slice(0, 100)}`);
   }
-}
 
-// ── Haptic feedback ──────────────────────────────────────────
-export function haptic(type: 'light' | 'medium' | 'heavy' = 'light') {
-  try {
-    const tg = (window as any).Telegram?.WebApp;
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.impactOccurred(type);
-    }
-  } catch { /* ignorar */ }
+  return data;
 }
-
-interface User {
-  telegramId: string;
-  username: string;
-  balance: number;
-  completedTasks: string[];
-  lastDailyBonus: string | null;
-  walletAddress: string | null;
-  tonWalletAddress: string | null;
-  referralCode?: string;
-  referredBy?: string;
-  referralCount?: number;
-  referralEarnings?: number;
-}
-
-type Tab = 'lobby' | 'wallet' | 'tasks' | 'friends';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>('lobby');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('lobby');
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
-  // ── Obtener datos del usuario de Telegram ──────────────────
-  const getTelegramUser = () => {
-    try {
-      const tg = (window as any).Telegram?.WebApp;
-      if (tg?.initDataUnsafe?.user) {
-        const u = tg.initDataUnsafe.user;
-        // Capturar referido si viene en start_param
-        const refCode = tg.initDataUnsafe?.start_param || null;
-        return {
-          telegramId: String(u.id),
-          username: u.username || u.first_name || 'Usuario',
-          refCode,
-        };
-      }
-    } catch { /* ignorar */ }
-    return {
-      telegramId: 'test_' + Math.floor(Math.random() * 100000),
-      username: 'TestUser',
-      refCode: null,
-    };
-  };
+  // ── Inicializar Telegram WebApp ───────────────────────────
+  const tg = (window as Window & { Telegram?: { WebApp: TelegramWebApp } }).Telegram?.WebApp;
+  const tgUser = tg?.initDataUnsafe?.user || DEV_USER;
 
-  const [tgUser] = useState(getTelegramUser);
-
-  // ── Inicializar Telegram WebApp ────────────────────────────
   useEffect(() => {
-    try {
-      const tg = (window as any).Telegram?.WebApp;
-      if (tg) {
-        tg.ready();
-        tg.expand();
-        tg.setHeaderColor('#0f1923');
-        tg.setBackgroundColor('#0f1923');
-      }
-    } catch { /* ignorar */ }
-  }, []);
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      // Configurar botón atrás
+      tg.BackButton?.hide();
+    }
+  }, [tg]);
 
-  // ── Cargar usuario ─────────────────────────────────────────
+  // ── Cargar usuario ────────────────────────────────────────
   const loadUser = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setError(null);
       const data = await apiCall({
-        telegramId: tgUser.telegramId,
-        username: tgUser.username,
+        telegramId: String(tgUser.id),
+        username: tgUser.username || tgUser.first_name || 'Usuario',
         action: 'load',
-        refCode: tgUser.refCode,
       }) as { success?: boolean; user?: User; isNew?: boolean; error?: string };
 
       if (data?.success && data.user) {
         setUser(data.user);
-        setIsNew(data.isNew || false);
+        setIsNew(!!data.isNew);
       } else {
-        setError(data?.error || 'Error desconocido');
+        setError(data?.error || 'Error al cargar usuario');
       }
     } catch (err) {
-      setError('Error de conexión: ' + (err instanceof Error ? err.message : String(err)));
+      const msg = err instanceof Error ? err.message : 'Error de conexión';
+      setError(`Error de conexión: ${msg}`);
     } finally {
       setLoading(false);
     }
-  }, [tgUser.telegramId, tgUser.username, tgUser.refCode]);
+  }, [tgUser.id, tgUser.username, tgUser.first_name]);
 
-  useEffect(() => { loadUser(); }, [loadUser]);
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
 
-  const showAlert = (msg: string) => {
-    try {
-      const tg = (window as any).Telegram?.WebApp;
-      if (tg?.showAlert) {
-        tg.showAlert(msg);
-        return;
-      }
-    } catch { /* ignorar */ }
-    setAlertMsg(msg);
-  };
-
-  const onBalanceUpdate = (newBalance: number) => {
+  // ── Actualizar balance ────────────────────────────────────
+  const handleBalanceUpdate = (newBalance: number) => {
     setUser(prev => prev ? { ...prev, balance: newBalance } : prev);
   };
 
-  const refreshUser = () => { loadUser(); };
+  // ── Vibración háptica ─────────────────────────────────────
+  const haptic = (type: 'light' | 'medium' | 'heavy' = 'light') => {
+    tg?.HapticFeedback?.impactOccurred(type);
+  };
 
-  const displayName = tgUser.username.length > 12
-    ? tgUser.username.slice(0, 12) + '…'
-    : tgUser.username;
+  // ── Mostrar alerta ────────────────────────────────────────
+  const showAlert = (msg: string) => {
+    if (tg && typeof tg.showAlert === 'function') {
+      tg.showAlert(msg);
+    } else {
+      setAlertMsg(msg);
+    }
+  };
 
-  // ── LOADING ────────────────────────────────────────────────
-  if (loading) return (
-    <div className="min-h-screen bg-[#0f1923] flex flex-col items-center justify-center gap-4">
-      <div className="text-6xl animate-bounce">🎰</div>
-      <p className="text-white/60 text-sm animate-pulse">Cargando Animalito Lotto...</p>
-    </div>
-  );
-
-  // ── ERROR ──────────────────────────────────────────────────
-  if (error || !user) return (
-    <div className="min-h-screen bg-[#0f1923] flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <div className="text-5xl">❌</div>
-      <h2 className="text-white font-bold text-xl">Error al cargar</h2>
-      <p className="text-white/50 text-sm leading-relaxed">{error || 'No se pudo cargar el usuario'}</p>
-      <button
-        onClick={() => { setLoading(true); loadUser(); }}
-        className="bg-teal-500 hover:bg-teal-400 text-white font-bold px-8 py-3 rounded-xl transition-all active:scale-95"
-      >
-        Reintentar
-      </button>
-    </div>
-  );
-
-  const TABS: { id: Tab; icon: string; label: string }[] = [
-    { id: 'lobby',   icon: '🎰', label: 'Jugar'   },
-    { id: 'wallet',  icon: '💎', label: 'Wallet'  },
-    { id: 'tasks',   icon: '✅', label: 'Tareas'  },
-    { id: 'friends', icon: '👥', label: 'Amigos'  },
-  ];
-
-  // ── MAIN APP ───────────────────────────────────────────────
-  return (
-    <TonConnectUIProvider manifestUrl={MANIFEST_URL}>
-      <div className="min-h-screen bg-[#0f1923] text-white overflow-hidden flex flex-col">
-
-        {/* ── HEADER ── */}
-        <div className="flex items-center justify-between px-4 py-3 bg-black/30 backdrop-blur border-b border-white/5 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🎰</span>
-            <div>
-              <p className="text-white/40 text-[10px] uppercase tracking-wider">Animalito</p>
-              <p className="text-white font-bold text-sm leading-tight">{displayName}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-teal-300 font-black text-base">{user.balance.toLocaleString()} 🥬</p>
-            <p className="text-white/30 text-[10px]">≈ {(user.balance / 1000).toFixed(3)} TON</p>
-          </div>
-        </div>
-
-        {/* ── BIENVENIDA ── */}
-        {isNew && (
-          <div className="mx-4 mt-3 bg-teal-500/15 border border-teal-500/30 rounded-xl px-4 py-2.5 flex items-center gap-2 flex-shrink-0">
-            <span className="text-xl">🎉</span>
-            <p className="text-teal-300 text-xs font-semibold">¡Bienvenido! Te regalamos <strong className="text-white">1,000 🥬</strong> para empezar.</p>
-          </div>
-        )}
-
-        {/* ── CONTENIDO ── */}
-        <div className="flex-1 overflow-y-auto">
-          {activeTab === 'lobby' && (
-            <Lobby
-              telegramId={tgUser.telegramId}
-              username={tgUser.username}
-              balance={user.balance}
-              onBalanceUpdate={onBalanceUpdate}
-              showAlert={showAlert}
-              haptic={haptic}
-            />
-          )}
-          {activeTab === 'wallet' && (
-            <Wallet
-              telegramId={tgUser.telegramId}
-              username={tgUser.username}
-              balance={user.balance}
-              onBalanceUpdate={onBalanceUpdate}
-              showAlert={showAlert}
-              haptic={haptic}
-            />
-          )}
-          {activeTab === 'tasks' && (
-            <Tasks
-              telegramId={tgUser.telegramId}
-              username={tgUser.username}
-              completedTasks={user.completedTasks}
-              lastDailyBonus={user.lastDailyBonus}
-              onBalanceUpdate={onBalanceUpdate}
-              showAlert={showAlert}
-              haptic={haptic}
-              refreshUser={refreshUser}
-            />
-          )}
-          {activeTab === 'friends' && (
-            <Friends
-              telegramId={tgUser.telegramId}
-              username={tgUser.username}
-              referralCode={user.referralCode || tgUser.telegramId}
-              referralCount={user.referralCount || 0}
-              referralEarnings={user.referralEarnings || 0}
-              balance={user.balance}
-              onBalanceUpdate={onBalanceUpdate}
-              showAlert={showAlert}
-              haptic={haptic}
-            />
-          )}
-        </div>
-
-        {/* ── NAVBAR INFERIOR ── */}
-        <div className="flex gap-1 px-2 py-2 bg-black/40 backdrop-blur border-t border-white/5 flex-shrink-0">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => { haptic('light'); setActiveTab(tab.id); }}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl transition-all ${
-                activeTab === tab.id
-                  ? 'bg-teal-500/20 text-teal-300'
-                  : 'text-white/40 hover:text-white/70'
-              }`}
-            >
-              <span className="text-lg">{tab.icon}</span>
-              <span className="text-[9px] font-semibold">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* ── MODAL ALERTA ── */}
-        {alertMsg && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-6" onClick={() => setAlertMsg(null)}>
-            <div className="bg-[#1a2634] border border-white/15 rounded-2xl p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
-              <p className="text-white text-sm leading-relaxed whitespace-pre-line">{alertMsg}</p>
-              <button onClick={() => setAlertMsg(null)} className="w-full bg-teal-500 text-white font-bold py-3 rounded-xl active:scale-95">OK</button>
-            </div>
-          </div>
-        )}
+  // ── Pantalla de carga ─────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f1117]">
+        <div className="text-5xl animate-bounce mb-4">🎰</div>
+        <p className="text-white/60 text-sm animate-pulse">Cargando Animalito Lotto...</p>
       </div>
-    </TonConnectUIProvider>
+    );
+  }
+
+  // ── Pantalla de error ─────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f1117] p-6 text-center">
+        <div className="text-5xl mb-4">❌</div>
+        <h2 className="text-white text-xl font-bold mb-2">Error al cargar</h2>
+        <p className="text-red-400 text-sm mb-6 max-w-xs leading-relaxed">{error}</p>
+        <button
+          onClick={loadUser}
+          className="bg-teal-500 hover:bg-teal-400 text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-95"
+        >
+          Reintentar
+        </button>
+        {/* Info de diagnóstico */}
+        <div className="mt-6 bg-white/5 rounded-xl p-4 text-left max-w-sm w-full">
+          <p className="text-white/40 text-xs font-mono">
+            TelegramID: {tgUser.id}<br/>
+            Telegram: {tg ? '✅ Detectado' : '❌ No detectado (modo web)'}<br/>
+            API: /api/user
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const displayName = tgUser.first_name || user.username;
+
+  return (
+    <div className="min-h-screen bg-[#0f1117] flex flex-col max-w-md mx-auto relative">
+
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <header className="flex items-center justify-between px-4 pt-4 pb-3 bg-[#0f1117]/95 backdrop-blur-sm sticky top-0 z-40 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">🎰</span>
+          <div>
+            <p className="text-white/50 text-xs leading-none">Hola,</p>
+            <p className="text-white font-bold text-sm leading-tight">
+              {displayName}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-teal-400 font-bold text-base leading-tight">
+            {user.balance.toLocaleString()} 🥬
+          </p>
+          <p className="text-white/40 text-xs leading-none">
+            ≈ {(user.balance / 1000).toFixed(3)} TON
+          </p>
+        </div>
+      </header>
+
+      {/* ── BIENVENIDA NUEVO USUARIO ──────────────────────── */}
+      {isNew && (
+        <div className="mx-4 mt-3 bg-gradient-to-r from-teal-500/20 to-emerald-500/20 border border-teal-500/30 rounded-2xl p-4 text-center">
+          <p className="text-2xl mb-1">🎉</p>
+          <p className="text-white font-bold text-sm">¡Bienvenido a Animalito Lotto!</p>
+          <p className="text-teal-300 text-xs mt-1">Te regalamos 1,000 🥬 para empezar.</p>
+        </div>
+      )}
+
+      {/* ── CONTENIDO PRINCIPAL ───────────────────────────── */}
+      <main className="flex-1 overflow-y-auto pb-20">
+        {activeTab === 'lobby' && (
+          <Lobby
+            telegramId={user.telegramId}
+            username={user.username}
+            balance={user.balance}
+            onBalanceUpdate={handleBalanceUpdate}
+            showAlert={showAlert}
+            haptic={haptic}
+          />
+        )}
+        {activeTab === 'wallet' && (
+          <Wallet
+            telegramId={user.telegramId}
+            username={user.username}
+            balance={user.balance}
+            walletAddress={user.walletAddress}
+            onBalanceUpdate={handleBalanceUpdate}
+            showAlert={showAlert}
+            haptic={haptic}
+          />
+        )}
+        {activeTab === 'tasks' && (
+          <Tasks
+            telegramId={user.telegramId}
+            username={user.username}
+            completedTasks={user.completedTasks}
+            lastDailyBonus={user.lastDailyBonus}
+            onBalanceUpdate={handleBalanceUpdate}
+            showAlert={showAlert}
+            haptic={haptic}
+            refreshUser={loadUser}
+          />
+        )}
+      </main>
+
+      {/* ── NAVBAR INFERIOR ──────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#16181f]/95 backdrop-blur-sm border-t border-white/10 flex z-40">
+        {([
+          { id: 'lobby',  icon: '🎰', label: 'Jugar'  },
+          { id: 'wallet', icon: '💰', label: 'Wallet' },
+          { id: 'tasks',  icon: '✅', label: 'Tareas' },
+        ] as { id: Tab; icon: string; label: string }[]).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => { haptic('light'); setActiveTab(tab.id); }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-3 transition-all ${
+              activeTab === tab.id
+                ? 'text-teal-400'
+                : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            <span className="text-xl">{tab.icon}</span>
+            <span className="text-[10px] font-medium">{tab.label}</span>
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 w-8 h-0.5 bg-teal-400 rounded-full" />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* ── MODAL ALERTA (fallback fuera de Telegram) ─────── */}
+      {alertMsg && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={() => setAlertMsg(null)}
+        >
+          <div
+            className="bg-[#1e2130] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <p className="text-white text-sm leading-relaxed whitespace-pre-line">{alertMsg}</p>
+            <button
+              onClick={() => setAlertMsg(null)}
+              className="mt-4 bg-teal-500 text-white font-bold px-6 py-2.5 rounded-xl w-full active:scale-95 transition-all"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
+}
+
+// ── Tipos de Telegram ────────────────────────────────────────
+interface TelegramWebApp {
+  ready: () => void;
+  expand: () => void;
+  initDataUnsafe: {
+    user?: {
+      id: number;
+      first_name: string;
+      username?: string;
+    };
+  };
+  HapticFeedback?: {
+    impactOccurred: (type: 'light' | 'medium' | 'heavy') => void;
+  };
+  BackButton?: {
+    show: () => void;
+    hide: () => void;
+  };
+  showAlert?: (msg: string) => void;
 }
