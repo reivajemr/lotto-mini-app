@@ -269,6 +269,8 @@ export default async function handler(req, res) {
     if (!action || action === 'load') {
       let user = await users.findOne({ telegramId: tid });
       if (!user) {
+        // Generar código de referido único
+        const referralCode = `REF${tid.slice(-6)}${Math.random().toString(36).slice(-3).toUpperCase()}`;
         const newUser = {
           telegramId: tid,
           username: username || 'Usuario',
@@ -279,12 +281,55 @@ export default async function handler(req, res) {
           totalWins: 0,
           walletAddress: null,
           tonWalletAddress: null,
+          referralCode,
+          referredBy: null,
+          referralCount: 0,
+          referralEarnings: 0,
+          pendingReferralBonus: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
+
+        // Procesar referido (si llegó con refCode)
+        const { refCode } = body;
+        if (refCode && refCode !== tid) {
+          const referrer = await users.findOne({
+            $or: [{ referralCode: refCode }, { telegramId: String(refCode) }]
+          });
+          if (referrer && referrer.telegramId !== tid) {
+            newUser.referredBy = referrer.telegramId;
+            newUser.balance += 200; // bonus al invitado: +200 🥬 extra
+            // Darle bonus pendiente al que invitó: +500 🥬
+            await users.updateOne(
+              { telegramId: referrer.telegramId },
+              {
+                $inc: {
+                  referralCount: 1,
+                  referralEarnings: 500,
+                  pendingReferralBonus: 500,
+                },
+                $set: { updatedAt: new Date() },
+              }
+            );
+            await notifyUser(
+              referrer.telegramId,
+              `👥 *¡Nuevo referido!*\n\n` +
+              `Tu amigo @${username || 'usuario'} se unió con tu enlace\n` +
+              `💰 Ganaste *+500 🥬*\n` +
+              `(Ve a Amigos → Reclamar para acreditarlo)`
+            );
+          }
+        }
+
         await users.insertOne(newUser);
         await notify(`🆕 Nuevo usuario: @${username || 'sin\\_username'} (ID: ${tid})`);
         return res.status(200).json({ success: true, user: newUser, isNew: true });
+      }
+      // Asegurarse que tenga código de referido
+      if (!user.referralCode) {
+        const referralCode = `REF${tid.slice(-6)}${Math.random().toString(36).slice(-3).toUpperCase()}`;
+        await users.updateOne({ telegramId: tid }, { $set: { referralCode } });
+        user.referralCode = referralCode;
       }
       return res.status(200).json({ success: true, user });
     }
@@ -676,6 +721,24 @@ export default async function handler(req, res) {
         { $set: { balance: newBalance, updatedAt: new Date() }, $inc: { totalBets: 1 } }
       );
 
+      // ── Comisión de referido: 5% al que invitó ────────────
+      const betterUser = await users.findOne({ telegramId: tid });
+      if (betterUser?.referredBy) {
+        const commission = Math.floor(totalBet * 0.05);
+        if (commission > 0) {
+          await users.updateOne(
+            { telegramId: betterUser.referredBy },
+            {
+              $inc: {
+                referralEarnings: commission,
+                pendingReferralBonus: commission,
+              },
+              $set: { updatedAt: new Date() },
+            }
+          );
+        }
+      }
+
       return res.status(200).json({ success: true, ticket, newBalance });
     }
 
@@ -870,6 +933,66 @@ export default async function handler(req, res) {
       );
 
       return res.status(200).json({ success: true, result, settled });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // REFERIDOS — Obtener lista de amigos
+    // ══════════════════════════════════════════════════════
+    if (action === 'getReferrals') {
+      const user = await users.findOne({ telegramId: tid });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      // Buscar todos los usuarios que fueron referidos por este usuario
+      const referredUsers = await users
+        .find({ referredBy: tid })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const referralList = await Promise.all(referredUsers.map(async (ru) => {
+        // Contar cuántas apuestas ha hecho el referido
+        const betsCount = await tickets.countDocuments({ telegramId: ru.telegramId });
+        return {
+          telegramId: ru.telegramId,
+          username: ru.username || `Usuario ${ru.telegramId.slice(-4)}`,
+          joinedAt: ru.createdAt?.toISOString() || new Date().toISOString(),
+          earned: 500, // bonus base por referido
+          betsCount,
+        };
+      }));
+
+      return res.status(200).json({
+        success: true,
+        referrals: referralList,
+        pendingBonus: user.pendingReferralBonus || 0,
+        totalEarnings: user.referralEarnings || 0,
+      });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // REFERIDOS — Reclamar bonus pendiente
+    // ══════════════════════════════════════════════════════
+    if (action === 'claimReferralBonus') {
+      const user = await users.findOne({ telegramId: tid });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      const pending = user.pendingReferralBonus || 0;
+      if (pending <= 0) {
+        return res.status(400).json({ error: 'No tienes bonos pendientes' });
+      }
+
+      const newBalance = (user.balance || 0) + pending;
+      await users.updateOne(
+        { telegramId: tid },
+        {
+          $set: {
+            balance: newBalance,
+            pendingReferralBonus: 0,
+            updatedAt: new Date(),
+          }
+        }
+      );
+
+      return res.status(200).json({ success: true, newBalance, claimed: pending });
     }
 
     return res.status(400).json({ error: `Acción desconocida: ${action}` });
