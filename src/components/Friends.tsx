@@ -1,280 +1,225 @@
-import { useState, useEffect, useCallback } from 'react';
-import { apiCall, haptic as globalHaptic } from '../App';
+import { useState, useEffect } from 'react';
+import { apiCall } from '../App';
 
-interface Referral {
-  telegramId: string;
-  username: string;
-  joinedAt: string;
-  earned: number;
-  betsCount: number;
-}
-
-interface Props {
+interface FriendsProps {
   telegramId: string;
   username: string;
   referralCode: string;
   referralCount: number;
   referralEarnings: number;
   balance: number;
-  onBalanceUpdate: (n: number) => void;
+  onBalanceUpdate: (b: number) => void;
   showAlert: (msg: string) => void;
-  haptic: typeof globalHaptic;
+  haptic: (t?: 'light' | 'medium' | 'heavy') => void;
 }
 
-const REFERRAL_BONUS_INVITER = 500;  // 🥬 que gana quien invita
-const REFERRAL_BONUS_INVITED = 200;  // 🥬 extra que gana el invitado
-const REFERRAL_PERCENT = 5;          // % de comisión de apuestas del referido
+interface ReferredUser { username: string; createdAt: string; }
 
 export default function Friends({
-  telegramId,
-  // username,
-  referralCode,
-  referralCount,
-  referralEarnings,
-  onBalanceUpdate,
-  showAlert,
-  haptic,
-}: Props) {
-  const [referrals, setReferrals] = useState<Referral[]>([]);
+  telegramId, referralCode: initialCode, referralCount: initialCount,
+  referralEarnings: initialEarnings, onBalanceUpdate, showAlert, haptic
+}: FriendsProps) {
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [pendingBonus, setPendingBonus] = useState(0);
   const [claiming, setClaiming] = useState(false);
+  const [refCode, setRefCode] = useState(initialCode);
+  const [refCount, setRefCount] = useState(initialCount);
+  const [refEarnings, setRefEarnings] = useState(initialEarnings);
+  const [pendingBonus, setPendingBonus] = useState(0);
+  const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([]);
 
-  const botUsername = 'AnimalitoLottoBot'; // ← cambia esto a tu bot
-  const referralLink = `https://t.me/${botUsername}?start=${referralCode}`;
+  useEffect(() => {
+    loadReferrals();
+  }, []);
 
-  // ── Cargar referidos ────────────────────────────────────────
-  const loadReferrals = useCallback(async () => {
+  const loadReferrals = async () => {
     setLoading(true);
     try {
-      const data = await apiCall({
-        telegramId,
-        action: 'getReferrals',
-      }) as { success?: boolean; referrals?: Referral[]; pendingBonus?: number; error?: string };
-
+      const data = await apiCall({ action: 'getReferrals', telegramId }) as any;
       if (data?.success) {
-        setReferrals(data.referrals || []);
+        setRefCode(data.referralCode || initialCode);
+        setRefCount(data.referralCount || 0);
+        setRefEarnings(data.referralEarnings || 0);
         setPendingBonus(data.pendingBonus || 0);
+        setReferredUsers(data.referredUsers || []);
       }
     } catch { /* ignorar */ }
-    finally { setLoading(false); }
-  }, [telegramId]);
-
-  useEffect(() => { loadReferrals(); }, [loadReferrals]);
-
-  // ── Copiar enlace ───────────────────────────────────────────
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopied(true);
-      haptic('medium');
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      showAlert('Link: ' + referralLink);
-    }
+    setLoading(false);
   };
 
-  // ── Compartir en Telegram ───────────────────────────────────
-  const shareOnTelegram = () => {
+  const botUsername = 'AnimalitoLottoBot'; // ← Cambia por tu bot
+  const refLink = `https://t.me/${botUsername}?start=${refCode}`;
+
+  const shareLink = () => {
     haptic('medium');
-    const msg = encodeURIComponent(
-      `🎰 ¡Juega Animalito Lotto y gana TON!\n\n` +
-      `🥬 Te regalo ${REFERRAL_BONUS_INVITED} lechugas de bienvenida\n` +
-      `💰 Sorteos cada hora + Flash cada 5 min\n\n` +
-      `👇 Entra aquí:`
-    );
-    const url = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${msg}`;
-    try {
-      const tg = (window as any).Telegram?.WebApp;
-      if (tg?.openTelegramLink) {
-        tg.openTelegramLink(url);
-      } else {
-        window.open(url, '_blank');
-      }
-    } catch {
-      window.open(url, '_blank');
+    const tg = (window as any).Telegram?.WebApp;
+    const text = `🎰 ¡Juega Animalito Lotto conmigo!\n\n🎁 Recibes 1,200 🥬 de bienvenida\n💰 Gana hasta x30 tu apuesta\n\n👇 Únete aquí:`;
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(text)}`);
+    } else {
+      navigator.clipboard?.writeText(refLink).then(() => showAlert('✅ Link copiado al portapapeles'));
     }
   };
 
-  // ── Reclamar bonos pendientes ───────────────────────────────
+  const copyLink = () => {
+    haptic('light');
+    navigator.clipboard?.writeText(refLink)
+      .then(() => showAlert('✅ Link copiado!'))
+      .catch(() => showAlert('Link: ' + refLink));
+  };
+
   const claimBonus = async () => {
-    if (pendingBonus <= 0 || claiming) return;
-    haptic('heavy');
+    if (pendingBonus <= 0) { showAlert('No tienes bonus pendiente 😅'); return; }
+    haptic('medium');
     setClaiming(true);
     try {
-      const data = await apiCall({
-        telegramId,
-        action: 'claimReferralBonus',
-      }) as { success?: boolean; newBalance?: number; claimed?: number; error?: string };
-
-      if (data?.success && data.newBalance !== undefined) {
+      const data = await apiCall({ action: 'claimReferralBonus', telegramId }) as any;
+      if (data?.success) {
         onBalanceUpdate(data.newBalance);
-        showAlert(`✅ ¡Reclamaste ${(data.claimed || 0).toLocaleString()} 🥬 de tus referidos!`);
+        showAlert(`✅ ¡Reclamaste ${data.claimed} 🥬!\nNuevo saldo: ${data.newBalance} 🥬`);
         setPendingBonus(0);
-        loadReferrals();
+        haptic('heavy');
       } else {
         showAlert('❌ ' + (data?.error || 'Error al reclamar'));
       }
-    } catch (err) {
-      showAlert('❌ ' + (err instanceof Error ? err.message : 'Error'));
-    } finally {
-      setClaiming(false);
-    }
+    } catch { showAlert('❌ Error de conexión'); }
+    setClaiming(false);
   };
 
-  // ── Fecha legible ───────────────────────────────────────────
-  const formatDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: '2-digit' });
-    } catch { return '—'; }
-  };
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[300px]">
+      <div className="text-4xl animate-bounce">👥</div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-6">
+    <div className="p-4 space-y-4">
 
-      {/* ── Título ── */}
-      <div className="text-center pt-2">
-        <p className="text-3xl mb-1">👥</p>
+      {/* Header */}
+      <div className="text-center py-2">
+        <div className="text-5xl mb-2">👥</div>
         <h2 className="text-white font-black text-xl">Invita Amigos</h2>
-        <p className="text-white/50 text-xs mt-1">Gana 🥬 por cada amigo que juegue</p>
+        <p className="text-white/40 text-xs mt-1">Gana recompensas por cada amigo que se una</p>
       </div>
 
-      {/* ── Stats de referidos ── */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
-        {[
-          { icon: '👤', label: 'Amigos', value: referralCount },
-          { icon: '💰', label: 'Ganado', value: `${referralEarnings.toLocaleString()}🥬` },
-          { icon: '⏳', label: 'Pendiente', value: `${pendingBonus.toLocaleString()}🥬` },
-        ].map(stat => (
-          <div key={stat.label} className="bg-white/5 border border-white/10 rounded-xl p-3 text-center">
-            <p className="text-xl mb-0.5">{stat.icon}</p>
-            <p className="text-white font-black text-sm">{stat.value}</p>
-            <p className="text-white/40 text-[10px]">{stat.label}</p>
-          </div>
-        ))}
+        <div className="bg-white/5 border border-white/8 rounded-2xl p-3 text-center">
+          <p className="text-2xl font-black text-teal-300">{refCount}</p>
+          <p className="text-white/40 text-[10px] mt-0.5">Amigos</p>
+        </div>
+        <div className="bg-white/5 border border-white/8 rounded-2xl p-3 text-center">
+          <p className="text-xl font-black text-yellow-300">{refEarnings.toLocaleString()}</p>
+          <p className="text-white/40 text-[10px] mt-0.5">🥬 Ganadas</p>
+        </div>
+        <div className="bg-white/5 border border-white/8 rounded-2xl p-3 text-center">
+          <p className="text-xl font-black text-green-300">5%</p>
+          <p className="text-white/40 text-[10px] mt-0.5">Comisión</p>
+        </div>
       </div>
 
-      {/* ── Reclamar bonus pendiente ── */}
+      {/* Bonus pendiente */}
       {pendingBonus > 0 && (
-        <div className="bg-gradient-to-r from-teal-500/20 to-emerald-500/20 border border-teal-500/40 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-teal-300 font-bold text-sm">🎁 Bonus disponible</p>
-              <p className="text-white font-black text-lg">{pendingBonus.toLocaleString()} 🥬</p>
-              <p className="text-white/50 text-xs">Comisiones de tus referidos</p>
+        <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 flex items-center justify-between">
+          <div>
+            <p className="text-green-300 font-bold text-sm">🎁 Bonus disponible</p>
+            <p className="text-green-400 font-black text-xl">{pendingBonus} 🥬</p>
+          </div>
+          <button
+            onClick={claimBonus}
+            disabled={claiming}
+            className="bg-green-500 hover:bg-green-400 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-all active:scale-95 disabled:opacity-50"
+          >
+            {claiming ? '⏳...' : '¡Reclamar!'}
+          </button>
+        </div>
+      )}
+
+      {/* Como funciona */}
+      <div className="bg-white/5 border border-white/8 rounded-2xl p-4">
+        <p className="text-white/60 text-xs font-bold uppercase tracking-wider mb-3">¿Cómo funciona?</p>
+        <div className="space-y-2.5">
+          {[
+            { icon: '🔗', title: 'Comparte tu link', desc: 'Envía tu link único a tus amigos' },
+            { icon: '🎁', title: 'Ellos reciben +200 🥬', desc: 'Bonus extra al registrarse contigo' },
+            { icon: '💰', title: 'Tú recibes +500 🥬', desc: 'Por cada amigo que se une' },
+            { icon: '📊', title: '5% de comisión', desc: 'De cada apuesta que hagan tus referidos' },
+          ].map((item, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <span className="text-xl flex-shrink-0">{item.icon}</span>
+              <div>
+                <p className="text-white text-xs font-semibold">{item.title}</p>
+                <p className="text-white/40 text-[11px]">{item.desc}</p>
+              </div>
             </div>
-            <button
-              onClick={claimBonus}
-              disabled={claiming}
-              className="bg-teal-500 hover:bg-teal-400 text-white font-black px-4 py-2.5 rounded-xl transition-all active:scale-95 disabled:opacity-50 text-sm"
-            >
-              {claiming ? '⏳...' : '✅ Reclamar'}
-            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tu link de referido */}
+      <div className="bg-teal-500/10 border border-teal-500/30 rounded-2xl p-4">
+        <p className="text-teal-300/70 text-[10px] uppercase tracking-wider mb-2">Tu link de referido</p>
+        <div className="bg-black/30 rounded-xl px-3 py-2.5 mb-3 break-all">
+          <p className="text-white/70 text-xs font-mono">{refLink}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={copyLink}
+            className="py-3 rounded-xl bg-white/10 text-white font-bold text-sm transition-all active:scale-95 active:bg-white/20"
+          >
+            📋 Copiar
+          </button>
+          <button
+            onClick={shareLink}
+            className="py-3 rounded-xl bg-teal-500 text-white font-bold text-sm transition-all active:scale-95 active:bg-teal-400"
+          >
+            📤 Compartir
+          </button>
+        </div>
+      </div>
+
+      {/* Tu código */}
+      <div className="flex items-center justify-between bg-white/5 border border-white/8 rounded-2xl px-4 py-3">
+        <div>
+          <p className="text-white/40 text-[10px] uppercase tracking-wider">Tu código</p>
+          <p className="text-white font-black text-lg tracking-widest">{refCode}</p>
+        </div>
+        <button
+          onClick={copyLink}
+          className="text-teal-400 text-sm bg-teal-500/10 px-3 py-1.5 rounded-xl"
+        >Copiar</button>
+      </div>
+
+      {/* Lista de referidos */}
+      {referredUsers.length > 0 && (
+        <div className="bg-white/5 border border-white/8 rounded-2xl p-4">
+          <p className="text-white/60 text-xs font-bold uppercase tracking-wider mb-3">
+            👥 Tus {refCount} amigos
+          </p>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {referredUsers.map((u, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-teal-500/20 flex items-center justify-center text-xs font-bold text-teal-300">
+                    {u.username?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <span className="text-white text-xs">{u.username || 'Usuario'}</span>
+                </div>
+                <span className="text-white/30 text-[10px]">
+                  {u.createdAt ? new Date(u.createdAt).toLocaleDateString('es-VE') : ''}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── Cómo funciona ── */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
-        <p className="text-white font-bold text-sm">💡 Cómo funciona el programa</p>
-        {[
-          { icon: '🔗', text: `Comparte tu enlace personal` },
-          { icon: '🎁', text: `Tu amigo recibe ${REFERRAL_BONUS_INVITED} 🥬 de bienvenida` },
-          { icon: '💰', text: `Tú ganas ${REFERRAL_BONUS_INVITER} 🥬 por cada amigo` },
-          { icon: '📊', text: `+ ${REFERRAL_PERCENT}% de comisión de sus apuestas` },
-          { icon: '♾️', text: `¡Sin límite de referidos!` },
-        ].map((item, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <span className="text-lg w-7 text-center flex-shrink-0">{item.icon}</span>
-            <p className="text-white/70 text-xs leading-relaxed">{item.text}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Tu link de referido ── */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
-        <p className="text-white font-bold text-sm">🔗 Tu enlace personal</p>
-        <div className="bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-          <p className="text-white/60 text-xs truncate flex-1">{referralLink}</p>
-          <button
-            onClick={copyLink}
-            className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
-              copied ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'
-            }`}
-          >
-            {copied ? '✅ Copiado' : '📋 Copiar'}
-          </button>
+      {referredUsers.length === 0 && (
+        <div className="text-center py-4 text-white/20 text-sm">
+          <p className="text-3xl mb-2">🤝</p>
+          <p>¡Aún no tienes referidos!</p>
+          <p className="text-xs mt-1">Comparte tu link y empieza a ganar</p>
         </div>
-        <p className="text-white/40 text-[10px] text-center">
-          Código: <span className="text-teal-300 font-bold">{referralCode}</span>
-        </p>
-      </div>
-
-      {/* ── Botón de compartir ── */}
-      <button
-        onClick={shareOnTelegram}
-        className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-white font-black py-4 rounded-2xl transition-all active:scale-95 text-base shadow-lg shadow-teal-500/25"
-      >
-        📤 Compartir en Telegram
-      </button>
-
-      {/* ── Lista de referidos ── */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-          <p className="text-white font-bold text-sm">👥 Tus amigos ({referralCount})</p>
-          <button onClick={loadReferrals} className="text-white/40 text-xs hover:text-white/70">
-            🔄 Actualizar
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center">
-            <p className="text-white/40 text-sm">⏳ Cargando...</p>
-          </div>
-        ) : referrals.length === 0 ? (
-          <div className="p-8 text-center space-y-2">
-            <p className="text-4xl">🫂</p>
-            <p className="text-white/50 text-sm">Aún no tienes referidos</p>
-            <p className="text-white/30 text-xs">¡Comparte tu enlace y gana 🥬!</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {referrals.map((ref, i) => (
-              <div key={ref.telegramId} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-black text-xs">{i + 1}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold text-sm truncate">
-                    {ref.username || `Usuario ${ref.telegramId.slice(-4)}`}
-                  </p>
-                  <p className="text-white/40 text-[10px]">
-                    Desde {formatDate(ref.joinedAt)} · {ref.betsCount || 0} apuestas
-                  </p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-teal-300 font-bold text-xs">
-                    +{(ref.earned || 0).toLocaleString()} 🥬
-                  </p>
-                  <p className="text-white/30 text-[10px]">ganado</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Ranking / motivación ── */}
-      <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-2xl p-4 text-center space-y-1">
-        <p className="text-2xl">🏆</p>
-        <p className="text-white font-bold text-sm">¡Top Referidor!</p>
-        <p className="text-white/50 text-xs">
-          El referidor con más amigos activos cada mes<br/>
-          recibirá un <span className="text-yellow-400 font-bold">premio especial en TON</span>
-        </p>
-      </div>
-
+      )}
     </div>
   );
 }
