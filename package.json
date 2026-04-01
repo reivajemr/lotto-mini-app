@@ -9,10 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tonconnect/sdk": "^3.4.1",
     "@tonconnect/ui-react": "^2.4.4",
     "clsx": "2.1.1",
-    "mongodb": "^7.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "3.4.0"
