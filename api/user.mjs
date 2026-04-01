@@ -23,7 +23,6 @@ async function getClient() {
   return client;
 }
 
-// Notificar al ADMIN
 async function notify(text) {
   const token = process.env.BOT_TOKEN;
   const chatId = process.env.CHAT_ID;
@@ -37,7 +36,6 @@ async function notify(text) {
   } catch { /* ignorar */ }
 }
 
-// Notificar al USUARIO
 async function notifyUser(telegramId, text) {
   const token = process.env.BOT_TOKEN;
   if (!token) return;
@@ -50,7 +48,6 @@ async function notifyUser(telegramId, text) {
   } catch { /* ignorar */ }
 }
 
-// Límites de apuesta
 const BET_CONFIG = {
   minBet: 50,
   maxBetPerUser: 1000,
@@ -58,7 +55,6 @@ const BET_CONFIG = {
   multiplier: 30,
 };
 
-// Hora Venezuela
 function vzNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }));
 }
@@ -68,7 +64,6 @@ function vzDateStr(d) {
   return `${vz.getFullYear()}-${String(vz.getMonth() + 1).padStart(2, '0')}-${String(vz.getDate()).padStart(2, '0')}`;
 }
 
-// 37 Animalitos
 const ANIMALS_MAP = {
   1: 'Carnero', 2: 'Toro', 3: 'Ciempiés', 4: 'Alacrán', 5: 'León', 6: 'Rana', 7: 'Perico',
   8: 'Ratón', 9: 'Águila', 10: 'Tigre', 11: 'Gato', 12: 'Caballo', 13: 'Mono', 14: 'Paloma',
@@ -78,8 +73,7 @@ const ANIMALS_MAP = {
   34: 'Loro', 35: 'Jirafa', 36: 'Culebra', 0: 'Ballena',
 };
 
-// Horarios de sorteos
-const DRAW_TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
+const DRAW_TIMES = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
 
 function getDrawSlot(drawId) {
   const parts = drawId.split('-');
@@ -94,7 +88,6 @@ function getDrawSlot(drawId) {
   return { drawTime, closeTime, resultTime };
 }
 
-// Pagar apuestas ganadoras de un sorteo
 async function settleDrawBets(db, drawId, winnerNumber, winnerAnimal) {
   const transactions = db.collection('transactions');
   const tickets = db.collection('tickets');
@@ -135,8 +128,7 @@ async function settleDrawBets(db, drawId, winnerNumber, winnerAnimal) {
         ticket.telegramId,
         `🎉 *¡GANASTE!* — Sorteo ${drawId.split('-').slice(-1)[0].slice(0, 2)}:${drawId.split('-').slice(-1)[0].slice(2, 4)}\n\n` +
         `🐾 Salió: *${winnerAnimal}* \\#${winnerNumber}\n` +
-        `💰 Premio: *+${totalPrize.toLocaleString()} 🥬*\n\n` +
-        `¡Felicidades! 🏆`
+        `💰 Premio: *+${totalPrize.toLocaleString()} 🥬*\n\n¡Felicidades! 🏆`
       );
     }
   }
@@ -146,7 +138,6 @@ async function settleDrawBets(db, drawId, winnerNumber, winnerAnimal) {
 }
 
 export default async function handler(req, res) {
-  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -170,6 +161,7 @@ export default async function handler(req, res) {
   const withdrawals = db.collection('withdrawals');
   const drawResults = db.collection('draw_results');
   const drawLimits = db.collection('draw_limits');
+  const deposits = db.collection('deposits');
 
   const body = req.body || {};
   const { telegramId, username, action } = body;
@@ -179,9 +171,9 @@ export default async function handler(req, res) {
   const tid = String(telegramId);
 
   try {
-    // ══════════════════════════════════════════════════════════
-    // CARGAR o CREAR USUARIO
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    // CARGAR / CREAR USUARIO
+    // ══════════════════════════════════════════════════════
     if (!action || action === 'load') {
       let user = await users.findOne({ telegramId: tid });
       if (!user) {
@@ -204,17 +196,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, user });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // OBTENER WALLET DEL ADMIN
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'getAdminWallet') {
       const wallet = process.env.ADMIN_TON_WALLET || 'No configurada';
       return res.status(200).json({ success: true, wallet });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // COMPLETAR TAREA
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'task') {
       const { taskId, reward } = body;
       if (!taskId || !reward) return res.status(400).json({ error: 'taskId y reward requeridos' });
@@ -238,25 +230,20 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, newBalance: updatedUser.balance });
       }
 
-      // Otras tareas (solo una vez)
       if (user.completedTasks && user.completedTasks.includes(taskId)) {
         return res.status(400).json({ error: 'Tarea ya completada' });
       }
       await users.updateOne(
         { telegramId: tid },
-        {
-          $inc: { balance: reward },
-          $push: { completedTasks: taskId },
-          $set: { updatedAt: new Date() },
-        }
+        { $inc: { balance: reward }, $push: { completedTasks: taskId }, $set: { updatedAt: new Date() } }
       );
       const updatedUser = await users.findOne({ telegramId: tid });
       return res.status(200).json({ success: true, newBalance: updatedUser.balance });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // OBTENER SORTEOS DEL DÍA
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'getDraws') {
       const game = body.game || 'lotto';
       const now = vzNow();
@@ -276,43 +263,28 @@ export default async function handler(req, res) {
         else if (now >= drawTime && now < resultTime) status = 'drawing';
         else status = 'done';
 
-        return {
-          drawId,
-          game,
-          time,
-          status,
-          closeTime: closeTime.toISOString(),
-          drawTime: drawTime.toISOString(),
-          resultTime: resultTime.toISOString(),
-        };
+        return { drawId, game, time, status, closeTime: closeTime.toISOString(), drawTime: drawTime.toISOString(), resultTime: resultTime.toISOString() };
       });
 
-      // Obtener resultados de los sorteos terminados
       const doneDrawIds = drawList.filter(d => d.status === 'done').map(d => d.drawId);
       const results = doneDrawIds.length > 0
         ? await drawResults.find({ drawId: { $in: doneDrawIds } }).toArray()
         : [];
 
       const resultsMap = {};
-      for (const r of results) {
-        resultsMap[r.drawId] = r;
-      }
+      for (const r of results) resultsMap[r.drawId] = r;
 
       const enrichedDraws = drawList.map(d => {
         const result = resultsMap[d.drawId];
-        return {
-          ...d,
-          winnerNumber: result?.winnerNumber ?? null,
-          winnerAnimal: result?.winnerAnimal ?? null,
-        };
+        return { ...d, winnerNumber: result?.winnerNumber ?? null, winnerAnimal: result?.winnerAnimal ?? null };
       });
 
       return res.status(200).json({ success: true, draws: enrichedDraws });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // OBTENER LÍMITES DE UN SORTEO
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'getDrawLimits') {
       const { drawId } = body;
       if (!drawId) return res.status(400).json({ error: 'drawId requerido' });
@@ -328,9 +300,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, limits });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // REGISTRAR APUESTA CON TICKET
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'placeBet') {
       const { drawId, drawGame, bets: betList } = body;
       if (!drawId || !betList || !Array.isArray(betList) || betList.length === 0) {
@@ -349,37 +321,26 @@ export default async function handler(req, res) {
       const totalBet = betList.reduce((s, b) => s + (b.amount || 0), 0);
 
       for (const bet of betList) {
-        if (bet.amount < BET_CONFIG.minBet) {
-          return res.status(400).json({ error: `Mínimo ${BET_CONFIG.minBet} 🥬 por animal` });
-        }
-        if (bet.amount > BET_CONFIG.maxBetPerUser) {
-          return res.status(400).json({ error: `Máximo ${BET_CONFIG.maxBetPerUser} 🥬 por animal (${bet.animal})` });
-        }
+        if (bet.amount < BET_CONFIG.minBet) return res.status(400).json({ error: `Mínimo ${BET_CONFIG.minBet} 🥬 por animal` });
+        if (bet.amount > BET_CONFIG.maxBetPerUser) return res.status(400).json({ error: `Máximo ${BET_CONFIG.maxBetPerUser} 🥬 por animal (${bet.animal})` });
       }
 
       if ((user.balance || 0) < totalBet) {
         return res.status(400).json({ error: `Saldo insuficiente. Tienes ${user.balance.toLocaleString()} 🥬` });
       }
 
-      // Verificar límites globales
       for (const bet of betList) {
         const limitDoc = await drawLimits.findOne({ drawId, animal: bet.animal });
         const currentTotal = limitDoc?.total || 0;
-        if (currentTotal >= BET_CONFIG.maxBetGlobal) {
-          return res.status(400).json({ error: `Límite de usuario alcanzado para ${bet.animal} (máx ${BET_CONFIG.maxBetPerUser} 🥬)` });
-        }
-        if (currentTotal + bet.amount > BET_CONFIG.maxBetGlobal) {
-          return res.status(400).json({ error: `Límite global alcanzado para ${bet.animal}. Solo quedan ${(BET_CONFIG.maxBetGlobal - currentTotal).toLocaleString()} 🥬` });
-        }
+        if (currentTotal >= BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite alcanzado para ${bet.animal}` });
+        if (currentTotal + bet.amount > BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite global alcanzado para ${bet.animal}.` });
       }
 
-      // Descontar balance
       await users.updateOne(
         { telegramId: tid },
         { $inc: { balance: -totalBet, totalBets: 1 }, $set: { updatedAt: new Date() } }
       );
 
-      // Actualizar límites globales
       for (const bet of betList) {
         await drawLimits.updateOne(
           { drawId, animal: bet.animal },
@@ -388,70 +349,37 @@ export default async function handler(req, res) {
         );
       }
 
-      // Crear registros de apuesta
       const betDocs = betList.map(bet => ({
-        telegramId: tid,
-        type: 'bet',
-        animal: bet.animal,
-        animalNumber: bet.number,
-        amount: bet.amount,
-        drawId,
-        drawGame: drawGame || 'lotto',
-        won: null,
-        prize: null,
-        status: 'pending',
-        createdAt: new Date(),
+        telegramId: tid, type: 'bet', animal: bet.animal, animalNumber: bet.number,
+        amount: bet.amount, drawId, drawGame: drawGame || 'lotto',
+        won: null, prize: null, status: 'pending', createdAt: new Date(),
       }));
       await transactions.insertMany(betDocs);
 
-      // Crear TICKET
       const ticketId = `T-${Date.now().toString(36).toUpperCase().slice(-5)}-${Math.random().toString(36).toUpperCase().slice(2, 5)}`;
       const ticketDoc = {
-        ticketId,
-        telegramId: tid,
-        username: user.username || username,
-        drawId,
+        ticketId, telegramId: tid, username: username || 'Usuario', drawId,
         drawGame: drawGame || 'lotto',
-        bets: betList.map(bet => ({
-          animal: bet.animal,
-          number: bet.number,
-          amount: bet.amount,
-          won: null,
-          prize: null,
-          status: 'pending',
-        })),
-        betsCount: betList.length,
-        totalBet,
-        totalPrize: null,
-        status: 'pending',
-        createdAt: new Date(),
+        bets: betList.map(bet => ({ animal: bet.animal, number: bet.number, amount: bet.amount, won: null, prize: null, status: 'pending' })),
+        betsCount: betList.length, totalBet, totalPrize: null, status: 'pending', createdAt: new Date(),
       };
       await tickets.insertOne(ticketDoc);
 
       const newBalance = (user.balance || 0) - totalBet;
-      return res.status(200).json({
-        success: true,
-        ticket: ticketDoc,
-        newBalance,
-        message: `✅ Ticket ${ticketId} registrado. ¡Buena suerte!`,
-      });
+      return res.status(200).json({ success: true, ticket: ticketDoc, newBalance, message: `✅ Ticket ${ticketId} registrado. ¡Buena suerte!` });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // OBTENER TICKETS DEL USUARIO
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'getTickets') {
-      const userTickets = await tickets
-        .find({ telegramId: tid })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .toArray();
+      const userTickets = await tickets.find({ telegramId: tid }).sort({ createdAt: -1 }).limit(50).toArray();
       return res.status(200).json({ success: true, tickets: userTickets });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     // GUARDAR WALLET
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'wallet') {
       const { walletAddress } = body;
       await users.updateOne(
@@ -461,9 +389,180 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    // REGISTRAR DEPÓSITO TON (enviado por TonConnect)
+    // ══════════════════════════════════════════════════════
+    if (action === 'registerDeposit') {
+      const { txHash, amountTon, amountLechugas, walletAddress: depositWallet, comment } = body;
+      if (!txHash || !amountTon || !amountLechugas) {
+        return res.status(400).json({ error: 'txHash, amountTon y amountLechugas requeridos' });
+      }
+
+      const existing = await deposits.findOne({ txHash });
+      if (existing) {
+        return res.status(200).json({ success: true, status: existing.status });
+      }
+
+      const deposit = {
+        telegramId: tid,
+        username: username || 'Usuario',
+        txHash,
+        amountTon: Number(amountTon),
+        amountLechugas: Number(amountLechugas),
+        walletAddress: depositWallet || null,
+        comment: comment || null,
+        status: 'pending',
+        createdAt: new Date(),
+        confirmedAt: null,
+      };
+      await deposits.insertOne(deposit);
+
+      await notify(
+        `💳 *Nuevo depósito TonConnect*\n\n` +
+        `👤 @${username || 'sin\\_username'} (ID: ${tid})\n` +
+        `💰 *${amountTon} TON* → ${Number(amountLechugas).toLocaleString()} 🥬\n` +
+        `🔗 TX: \`${String(txHash).slice(0, 30)}...\`\n` +
+        `📋 Memo: ${comment || 'N/A'}`
+      );
+
+      return res.status(200).json({ success: true, status: 'pending' });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // VERIFICAR DEPÓSITO EN BLOCKCHAIN
+    // ══════════════════════════════════════════════════════
+    if (action === 'checkDeposit') {
+      const { txHash } = body;
+      if (!txHash) return res.status(400).json({ error: 'txHash requerido' });
+
+      const deposit = await deposits.findOne({ txHash, telegramId: tid });
+      if (!deposit) return res.status(404).json({ error: 'Depósito no encontrado' });
+
+      if (deposit.status === 'confirmed') {
+        const user = await users.findOne({ telegramId: tid });
+        return res.status(200).json({ success: true, confirmed: true, newBalance: user?.balance || 0 });
+      }
+
+      // Intentar verificación automática via TON Center API
+      try {
+        const adminWalletAddr = process.env.ADMIN_TON_WALLET;
+        if (adminWalletAddr) {
+          const tonApiKey = process.env.TON_API_KEY || '';
+          const apiUrl = `https://testnet.toncenter.com/api/v2/getTransactions?address=${adminWalletAddr}&limit=20&to_lt=0&archival=false`;
+          const tonRes = await fetch(apiUrl, {
+            headers: tonApiKey ? { 'X-API-Key': tonApiKey } : {},
+          });
+          const tonData = await tonRes.json();
+
+          if (tonData?.ok && Array.isArray(tonData.result)) {
+            const expectedNano = Math.floor(deposit.amountTon * 1_000_000_000);
+
+            const matchedTx = tonData.result.find(tx => {
+              const inMsg = tx?.in_msg;
+              if (!inMsg) return false;
+              const msgValue = parseInt(inMsg.value || '0');
+              const msgComment = inMsg.message || '';
+              const amountMatch = Math.abs(msgValue - expectedNano) < 15_000_000; // ±0.015 TON fees
+              const commentMatch = msgComment.includes(tid);
+              return amountMatch && commentMatch;
+            });
+
+            if (matchedTx) {
+              await deposits.updateOne(
+                { txHash },
+                { $set: { status: 'confirmed', confirmedAt: new Date(), confirmedBy: 'blockchain', tonTxId: matchedTx.transaction_id?.hash } }
+              );
+
+              await users.updateOne(
+                { telegramId: tid },
+                { $inc: { balance: deposit.amountLechugas }, $set: { updatedAt: new Date() } }
+              );
+
+              const updatedUser = await users.findOne({ telegramId: tid });
+
+              await notify(
+                `✅ *Depósito auto-confirmado*\n\n` +
+                `👤 @${deposit.username || 'sin\\_username'} (ID: ${tid})\n` +
+                `💰 *+${deposit.amountLechugas.toLocaleString()} 🥬* acreditadas\n` +
+                `💵 ${deposit.amountTon} TON`
+              );
+
+              await notifyUser(
+                tid,
+                `✅ *¡Depósito confirmado!*\n\n` +
+                `💰 *+${deposit.amountLechugas.toLocaleString()} 🥬* en tu cuenta.\n` +
+                `Nuevo saldo: ${updatedUser?.balance?.toLocaleString()} 🥬 🎉`
+              );
+
+              return res.status(200).json({ success: true, confirmed: true, newBalance: updatedUser?.balance || 0 });
+            }
+          }
+        }
+      } catch (blockchainErr) {
+        console.error('Blockchain check error:', blockchainErr);
+      }
+
+      return res.status(200).json({ success: true, confirmed: false });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // CONFIRMAR DEPÓSITO MANUALMENTE (admin)
+    // ══════════════════════════════════════════════════════
+    if (action === 'adminConfirmDeposit') {
+      const { adminKey, txHash: adminTxHash, targetTelegramId } = body;
+      if (adminKey !== process.env.ADMIN_SECRET_KEY) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      let deposit;
+      if (adminTxHash) {
+        deposit = await deposits.findOne({ txHash: adminTxHash });
+      } else if (targetTelegramId) {
+        deposit = await deposits.findOne({ telegramId: String(targetTelegramId), status: 'pending' });
+      }
+
+      if (!deposit) return res.status(404).json({ error: 'Depósito no encontrado' });
+      if (deposit.status === 'confirmed') return res.status(400).json({ error: 'Ya estaba confirmado' });
+
+      await deposits.updateOne(
+        { _id: deposit._id },
+        { $set: { status: 'confirmed', confirmedAt: new Date(), confirmedBy: 'admin' } }
+      );
+
+      await users.updateOne(
+        { telegramId: deposit.telegramId },
+        { $inc: { balance: deposit.amountLechugas }, $set: { updatedAt: new Date() } }
+      );
+
+      const updatedUser = await users.findOne({ telegramId: deposit.telegramId });
+
+      await notifyUser(
+        deposit.telegramId,
+        `✅ *¡Depósito confirmado!*\n\n` +
+        `💰 *+${deposit.amountLechugas.toLocaleString()} 🥬* añadidas a tu cuenta.\n` +
+        `Nuevo saldo: ${updatedUser?.balance?.toLocaleString()} 🥬 🎉`
+      );
+
+      return res.status(200).json({ success: true, amountLechugas: deposit.amountLechugas, newBalance: updatedUser?.balance || 0 });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // LISTAR DEPÓSITOS PENDIENTES (admin)
+    // ══════════════════════════════════════════════════════
+    if (action === 'adminListDeposits') {
+      const { adminKey } = body;
+      if (adminKey !== process.env.ADMIN_SECRET_KEY) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const pending = await deposits.find({ status: 'pending' }).sort({ createdAt: -1 }).limit(50).toArray();
+      const confirmed = await deposits.find({ status: 'confirmed' }).sort({ confirmedAt: -1 }).limit(20).toArray();
+      return res.status(200).json({ success: true, pending, confirmed });
+    }
+
+    // ══════════════════════════════════════════════════════
     // SOLICITUD DE RETIRO
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     if (action === 'withdraw') {
       const { walletAddress, withdrawAmount } = body;
       const user = await users.findOne({ telegramId: tid });
@@ -473,9 +572,7 @@ export default async function handler(req, res) {
       if (!wallet) return res.status(400).json({ error: 'Guarda tu wallet primero.' });
 
       const amount = Number(withdrawAmount);
-      if (!amount || amount < 0.1) {
-        return res.status(400).json({ error: 'Monto mínimo: 0.1 TON' });
-      }
+      if (!amount || amount < 0.1) return res.status(400).json({ error: 'Monto mínimo: 0.1 TON' });
 
       const amountLechugas = Math.floor(amount * 1000);
       if (amountLechugas > (user.balance || 0)) {
@@ -488,32 +585,59 @@ export default async function handler(req, res) {
       );
 
       const withdrawal = {
-        telegramId: tid,
-        username: user.username || username,
-        walletAddress: wallet,
-        amountTON: amount,
-        amountLechugas,
-        status: 'pending',
-        createdAt: new Date(),
+        telegramId: tid, username: username || 'Usuario', walletAddress: wallet,
+        amountTON: amount, amountLechugas, status: 'pending', createdAt: new Date(),
       };
       const result = await withdrawals.insertOne(withdrawal);
       const withdrawId = result.insertedId.toString().slice(-6).toUpperCase();
 
       await notify(
         `💸 *Solicitud de retiro*\n\n` +
-        `👤 @${user.username || 'sin\\_username'} (ID: ${tid})\n` +
-        `💰 Monto: *${amount} TON* (${amountLechugas.toLocaleString()} 🥬)\n` +
-        `👛 Wallet: \`${wallet}\`\n` +
-        `📋 ID: #${withdrawId}`
+        `👤 @${username || 'sin\\_username'} (ID: ${tid})\n` +
+        `💰 *${amount} TON* (${amountLechugas.toLocaleString()} 🥬)\n` +
+        `👛 \`${wallet}\`\n` +
+        `📋 ID: #${withdrawId}\n\n` +
+        `_Confirma el pago manualmente y notifica al usuario._`
       );
 
       const newBalance = (user.balance || 0) - amountLechugas;
       return res.status(200).json({ success: true, newBalance, withdrawId });
     }
 
-    // ══════════════════════════════════════════════════════════
-    // SCRAPE RESULTS (llamado por el cron vía scraper.mjs)
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    // CONFIRMAR RETIRO (admin)
+    // ══════════════════════════════════════════════════════
+    if (action === 'adminConfirmWithdrawal') {
+      const { adminKey, withdrawalId } = body;
+      if (adminKey !== process.env.ADMIN_SECRET_KEY) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+      if (!withdrawalId) return res.status(400).json({ error: 'withdrawalId requerido' });
+
+      const { ObjectId } = await import('mongodb');
+      const withdrawal = await withdrawals.findOne({ _id: new ObjectId(withdrawalId) });
+      if (!withdrawal) return res.status(404).json({ error: 'Retiro no encontrado' });
+      if (withdrawal.status === 'completed') return res.status(400).json({ error: 'Ya procesado' });
+
+      await withdrawals.updateOne(
+        { _id: withdrawal._id },
+        { $set: { status: 'completed', completedAt: new Date(), completedBy: 'admin' } }
+      );
+
+      await notifyUser(
+        withdrawal.telegramId,
+        `✅ *¡Retiro procesado!*\n\n` +
+        `💰 *${withdrawal.amountTON} TON* enviado a tu wallet.\n` +
+        `👛 ${withdrawal.walletAddress.slice(0, 8)}...${withdrawal.walletAddress.slice(-6)}\n\n` +
+        `¡Gracias por jugar en Animalito Lotto! 🎰`
+      );
+
+      return res.status(200).json({ success: true });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // SCRAPE RESULTS
+    // ══════════════════════════════════════════════════════
     if (action === 'scrapeResults') {
       const { cronKey, targetHour, targetGame } = body;
       if (cronKey !== process.env.CRON_SECRET) {
@@ -525,7 +649,6 @@ export default async function handler(req, res) {
       const hour = targetHour || now.getHours();
       const timeStr = `${String(hour).padStart(2, '0')}00`;
       const results = {};
-
       const gamesToProcess = targetGame ? [targetGame] : ['lotto', 'granja'];
 
       for (const game of gamesToProcess) {
@@ -535,8 +658,6 @@ export default async function handler(req, res) {
           results[game] = { status: 'already_exists', drawId };
           continue;
         }
-
-        // Aquí iría el scraping real - por ahora retornamos pendiente
         results[game] = { status: 'scraping_pending', drawId };
       }
 
