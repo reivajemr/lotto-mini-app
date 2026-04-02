@@ -3,7 +3,7 @@ import Lobby from './components/Lobby';
 import Wallet from './components/Wallet';
 import Tasks from './components/Tasks';
 
-// ── Tipos ────────────────────────────────────────────────────
+// ── Tipos ──────────────────────────────────────────────────────────────
 export type Tab = 'lobby' | 'wallet' | 'tasks';
 
 export interface User {
@@ -18,14 +18,14 @@ export interface User {
   createdAt: string;
 }
 
-// ── DEV fallback (cuando no corre dentro de Telegram) ────────
+// ── DEV fallback (cuando no corre dentro de Telegram) ──────────────────
 const DEV_USER = {
   id: 999999999,
   first_name: 'Jugador',
   username: 'dev_user',
 };
 
-// ── Helper para llamadas al API con manejo de errores robusto ─
+// ── Helper para llamadas al API con manejo de errores robusto ──────────
 export async function apiCall(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch('/api/user', {
     method: 'POST',
@@ -56,7 +56,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
-  // ── Inicializar Telegram WebApp ───────────────────────────
+  // ── Inicializar Telegram WebApp ─────────────────────────────────────
   const tg = (window as Window & { Telegram?: { WebApp: TelegramWebApp } }).Telegram?.WebApp;
   const tgUser = tg?.initDataUnsafe?.user || DEV_USER;
 
@@ -69,7 +69,7 @@ export default function App() {
     }
   }, [tg]);
 
-  // ── Cargar usuario ────────────────────────────────────────
+  // ── Cargar usuario ──────────────────────────────────────────────────
   const loadUser = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -98,17 +98,17 @@ export default function App() {
     loadUser();
   }, [loadUser]);
 
-  // ── Actualizar balance ────────────────────────────────────
+  // ── Actualizar balance ───────────────────────────────────────────────
   const handleBalanceUpdate = (newBalance: number) => {
     setUser(prev => prev ? { ...prev, balance: newBalance } : prev);
   };
 
-  // ── Vibración háptica ─────────────────────────────────────
+  // ── Vibración háptica ────────────────────────────────────────────────
   const haptic = (type: 'light' | 'medium' | 'heavy' = 'light') => {
     tg?.HapticFeedback?.impactOccurred(type);
   };
 
-  // ── Mostrar alerta ────────────────────────────────────────
+  // ── Mostrar alerta ───────────────────────────────────────────────────
   const showAlert = (msg: string) => {
     if (tg && typeof tg.showAlert === 'function') {
       tg.showAlert(msg);
@@ -117,7 +117,7 @@ export default function App() {
     }
   };
 
-  // ── Pantalla de carga ─────────────────────────────────────
+  // ── Pantalla de carga ────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f1117]">
@@ -127,7 +127,7 @@ export default function App() {
     );
   }
 
-  // ── Pantalla de error ─────────────────────────────────────
+  // ── Pantalla de error ────────────────────────────────────────────────
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0f1117] p-6 text-center">
@@ -154,7 +154,7 @@ export default function App() {
 
   if (!user) return null;
 
-  const displayName = tgUser.first_name || user.username;
+  const displayName = user.username || tgUser.first_name || 'Jugador';
 
   return (
     <div className="min-h-screen bg-[#0f1117] flex flex-col max-w-md mx-auto relative">
@@ -236,7 +236,7 @@ export default function App() {
           <button
             key={tab.id}
             onClick={() => { haptic('light'); setActiveTab(tab.id); }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-3 transition-all ${
+            className={`flex-1 flex flex-col items-center py-3 gap-1 transition-colors ${
               activeTab === tab.id
                 ? 'text-teal-400'
                 : 'text-white/40 hover:text-white/70'
@@ -244,9 +244,6 @@ export default function App() {
           >
             <span className="text-xl">{tab.icon}</span>
             <span className="text-[10px] font-medium">{tab.label}</span>
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 w-8 h-0.5 bg-teal-400 rounded-full" />
-            )}
           </button>
         ))}
       </nav>
@@ -264,7 +261,7 @@ export default function App() {
             <p className="text-white text-sm leading-relaxed whitespace-pre-line">{alertMsg}</p>
             <button
               onClick={() => setAlertMsg(null)}
-              className="mt-4 bg-teal-500 text-white font-bold px-6 py-2.5 rounded-xl w-full active:scale-95 transition-all"
+              className="mt-4 bg-teal-500 text-white font-bold px-6 py-2 rounded-xl text-sm active:scale-95 transition-all"
             >
               OK
             </button>
@@ -275,10 +272,11 @@ export default function App() {
   );
 }
 
-// ── Tipos de Telegram ────────────────────────────────────────
+// ── Tipos de Telegram WebApp ─────────────────────────────────────────
 interface TelegramWebApp {
   ready: () => void;
   expand: () => void;
+  showAlert: (msg: string, callback?: () => void) => void;
   initDataUnsafe: {
     user?: {
       id: number;
@@ -286,12 +284,8 @@ interface TelegramWebApp {
       username?: string;
     };
   };
+  BackButton?: { hide: () => void; show: () => void };
   HapticFeedback?: {
-    impactOccurred: (type: 'light' | 'medium' | 'heavy') => void;
+    impactOccurred: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void;
   };
-  BackButton?: {
-    show: () => void;
-    hide: () => void;
-  };
-  showAlert?: (msg: string) => void;
 }
