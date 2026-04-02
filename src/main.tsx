@@ -4,8 +4,11 @@ import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import App from './App';
 import './index.css';
 
-// Usa el mismo origen para evitar CORS/401 en TonConnect dentro de Telegram
-const MANIFEST_URL = `${window.location.origin}/tonconnect-manifest.json`;
+const configuredManifestUrl = import.meta.env.VITE_TONCONNECT_MANIFEST_URL?.trim();
+const fallbackManifestUrl = `${window.location.origin}/tonconnect-manifest.json`;
+
+// En producción (Telegram + WalletBot) el manifest debe ser público y sin auth.
+const MANIFEST_URL = configuredManifestUrl || fallbackManifestUrl;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
