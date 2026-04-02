@@ -22,15 +22,6 @@ const PACKS = [
 
 const toNano = (ton: number) => Math.floor(ton * 1_000_000_000).toString();
 
-function encodeComment(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  const prefix = new Uint8Array(4);
-  const full = new Uint8Array(prefix.length + bytes.length);
-  full.set(prefix);
-  full.set(bytes, 4);
-  return btoa(String.fromCharCode(...full));
-}
-
 export default function Wallet({
   telegramId,
   username,
@@ -110,7 +101,7 @@ export default function Wallet({
       const transaction = {
         validUntil: Math.floor(Date.now() / 1000) + 600,
         messages: [
-          { address: adminWallet, amount: toNano(pack.ton), payload: encodeComment(comment) },
+          { address: adminWallet, amount: toNano(pack.ton) },
         ],
       };
 
