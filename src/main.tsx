@@ -4,16 +4,19 @@ import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import App from './App';
 import './index.css';
 
-// The manifest must be hosted at a publicly accessible URL
-// In production (Vercel), this file exists at /tonconnect-manifest.json
-const MANIFEST_URL = 'https://lotto-mini-app.vercel.app/tonconnect-manifest.json';
+const MANIFEST_URL = `${window.location.origin}/tonconnect-manifest.json`;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <TonConnectUIProvider
       manifestUrl={MANIFEST_URL}
       actionsConfiguration={{
-        twaReturnUrl: 'https://t.me/AnimalitoLottoBot/app',
+        returnStrategy: 'back',
+      }}
+      walletsListConfiguration={{
+        // Excluir telegram-wallet (SCW) que causa el error en móvil
+        // Solo mostrar wallets con bridge confiable
+        excludeWallets: ['telegram-wallet'],
       }}
     >
       <App />
