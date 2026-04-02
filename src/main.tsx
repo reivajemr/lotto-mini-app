@@ -13,6 +13,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       actionsConfiguration={{
         returnStrategy: 'back',
       }}
+      walletsListConfiguration={{
+        // Excluir telegram-wallet (SCW) que causa el error en móvil
+        // Solo mostrar wallets con bridge confiable
+        excludeWallets: ['telegram-wallet'],
+      }}
     >
       <App />
     </TonConnectUIProvider>
