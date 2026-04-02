@@ -1,8 +1,3 @@
-diff --git a/src/components/Wallet.tsx b/src/components/Wallet.tsx
-index 16933926712014402861528b143325d237f17fd3..c8f5f01e4c7078742e535fabe126d5e3806d3d2f 100644
---- a/src/components/Wallet.tsx
-+++ b/src/components/Wallet.tsx
-@@ -1,58 +1,49 @@
  import { useState, useEffect, useCallback } from 'react';
  import { TonConnectButton, useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react';
  import { apiCall } from '../App';
