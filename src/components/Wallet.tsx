@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { TonConnectButton, useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react';
 import { apiCall } from '../App';
 
+const LECHUGAS_PER_TON = Number(import.meta.env.VITE_LECHUGAS_PER_TON || 1000);
+
+const formatTon = (lechugas: number) => {
+  return Number(lechugas / LECHUGAS_PER_TON).toLocaleString('es-ES', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
+};
+
 interface WalletProps {
   telegramId: string;
   username: string;
@@ -13,12 +22,12 @@ interface WalletProps {
 }
 
 const PACKS = [
-  { lechugas: 1_000,  ton: 1,   label: 'Básico',   popular: false },
-  { lechugas: 5_000,  ton: 5,   label: 'Estándar', popular: true  },
-  { lechugas: 10_000, ton: 10,  label: 'Pro',      popular: false },
-  { lechugas: 25_000, ton: 25,  label: 'VIP',      popular: false },
-  { lechugas: 50_000, ton: 50,  label: 'Premium',  popular: false },
-];
+  { ton: 1,   label: 'Básico',   popular: false },
+  { ton: 5,   label: 'Estándar', popular: true  },
+  { ton: 10,  label: 'Pro',      popular: false },
+  { ton: 25,  label: 'VIP',      popular: false },
+  { ton: 50,  label: 'Premium',  popular: false },
+].map(pack => ({ ...pack, lechugas: pack.ton * LECHUGAS_PER_TON }));
 
 const toNano = (ton: number): string => String(Math.floor(ton * 1_000_000_000));
 
@@ -48,7 +57,7 @@ export default function Wallet({
   const wallet = useTonWallet();
   const userFriendlyAddress = useTonAddress();
   const isConnected = !!wallet;
-  const balanceTON = (balance / 1000).toFixed(3);
+  const balanceTON = formatTon(balance);
 
   // Auto-guardar wallet al conectar
   useEffect(() => {
@@ -101,10 +110,11 @@ export default function Wallet({
 
       if (result?.boc) {
         const regData = await apiCall({
-          telegramId, username, action: 'registerDeposit',
+          telegramId,
+          username,
+          action: 'registerDeposit',
           txBoc: result.boc,
           amountTon: pack.ton,
-          amountLechugas: pack.lechugas,
           walletAddress: userFriendlyAddress,
           comment: `LOTTO_${telegramId}_${pack.lechugas}`,
         }) as { depositId?: string };
@@ -179,7 +189,7 @@ export default function Wallet({
     if (!isConnected && !walletSaved) { showAlert('⚠️ Guarda tu dirección primero.'); return; }
     const amount = parseFloat(withdrawTon);
     if (isNaN(amount) || amount < 0.1) { showAlert('⚠️ Monto mínimo: 0.1 TON'); return; }
-    if (amount * 1000 > balance) { showAlert(`⚠️ Saldo insuficiente. Tienes ${balanceTON} TON`); return; }
+    if (amount * LECHUGAS_PER_TON > balance) { showAlert(`⚠️ Saldo insuficiente. Tienes ${balanceTON} TON`); return; }
     setLoading(true);
     try {
       const data = await apiCall({
@@ -315,7 +325,9 @@ export default function Wallet({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-white font-bold">{pack.lechugas.toLocaleString()} 🥬</p>
-                      <p className="text-white/40 text-xs">{pack.label} · 1,000🥬 = 1 TON</p>
+                      <p className="text-white/40 text-xs">
+                {pack.label} · {LECHUGAS_PER_TON.toLocaleString()}🥬 = 1 TON
+              </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="text-teal-300 font-bold">{pack.ton} TON</p>
@@ -448,7 +460,7 @@ export default function Wallet({
               <button onClick={() => setWithdrawTon(balanceTON)} className="bg-white/10 hover:bg-white/20 px-4 rounded-xl text-white/70 text-sm">MAX</button>
             </div>
             {withdrawTon && !isNaN(parseFloat(withdrawTon)) && (
-              <p className="text-white/40 text-xs text-center">= {(parseFloat(withdrawTon) * 1000).toLocaleString()} 🥬 descontadas</p>
+              <p className="text-white/40 text-xs text-center">= {(parseFloat(withdrawTon) * LECHUGAS_PER_TON).toLocaleString()} 🥬 descontadas</p>
             )}
           </div>
 

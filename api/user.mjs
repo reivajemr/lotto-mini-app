@@ -1,7 +1,35 @@
 // api/user.mjs
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { MongoClient } from 'mongodb';
 
-const uri = process.env.MONGODB_URI;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function loadLocalEnv() {
+  const envPath = path.join(__dirname, '..', '.env.local');
+  if (!fs.existsSync(envPath)) return {};
+
+  const content = fs.readFileSync(envPath, 'utf8');
+  return Object.fromEntries(
+    content
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#') && line.includes('='))
+      .map(line => {
+        const [key, ...valueParts] = line.split('=');
+        let value = valueParts.join('=');
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+        return [key, value];
+      })
+  );
+}
+
+const localEnv = loadLocalEnv();
+const uri = localEnv.MONGODB_URI || process.env.MONGODB_URI;
 let cachedClient = null;
 
 async function getClient() {
@@ -47,6 +75,18 @@ const BET_CONFIG = {
   minBet: 50, maxBetPerUser: 1000, maxBetGlobal: 10000, multiplier: 30,
 };
 
+const TASK_REWARDS = {
+  daily: 500,
+  share_app: 300,
+  first_bet: 200,
+  save_wallet: 250,
+  play_3_days: 1000,
+};
+
+const LECHUGAS_PER_TON = Number(
+  process.env.LECHUGAS_PER_TON || process.env.VITE_LECHUGAS_PER_TON || 1000
+);
+
 function vzNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }));
 }
@@ -67,6 +107,26 @@ function getDrawSlot(drawId) {
   const closeTime = new Date(drawTime.getTime() - 10*60000);
   const resultTime = new Date(drawTime.getTime() + 5*60000);
   return { drawTime, closeTime, resultTime };
+}
+
+function parsePositiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parseNonNegativeInteger(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+function validateBetPayload(bet, index) {
+  const amount = parsePositiveNumber(bet.amount);
+  if (amount === null) throw new Error(`Apuesta ${index + 1}: monto inválido`);
+  const number = parseNonNegativeInteger(bet.number);
+  if (number === null) throw new Error(`Apuesta ${index + 1}: número inválido`);
+  const animal = typeof bet.animal === 'string' ? bet.animal.trim() : '';
+  if (!animal) throw new Error(`Apuesta ${index + 1}: animal inválido`);
+  return { animal, number, amount };
 }
 
 async function settleDrawBets(db, drawId, winnerNumber, winnerAnimal) {
@@ -186,8 +246,9 @@ export default async function handler(req, res) {
     // COMPLETAR TAREA
     // ══════════════════════════════════════════════════════
     if (action === 'task') {
-      const { taskId, reward } = body;
-      if (!taskId || !reward) return res.status(400).json({ error: 'taskId y reward requeridos' });
+      const { taskId } = body;
+      if (!taskId || !(taskId in TASK_REWARDS)) return res.status(400).json({ error: 'taskId inválido' });
+      const reward = TASK_REWARDS[taskId];
       const user = await users.findOne({ telegramId: tid });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
       if (taskId === 'daily') {
@@ -199,12 +260,12 @@ export default async function handler(req, res) {
         }
         await users.updateOne({ telegramId: tid }, { $inc: { balance: reward }, $set: { lastDailyBonus: now, updatedAt: now } });
         const u = await users.findOne({ telegramId: tid });
-        return res.status(200).json({ success: true, newBalance: u.balance });
+        return res.status(200).json({ success: true, newBalance: u.balance, reward });
       }
       if (user.completedTasks?.includes(taskId)) return res.status(400).json({ error: 'Tarea ya completada' });
       await users.updateOne({ telegramId: tid }, { $inc: { balance: reward }, $push: { completedTasks: taskId }, $set: { updatedAt: new Date() } });
       const u = await users.findOne({ telegramId: tid });
-      return res.status(200).json({ success: true, newBalance: u.balance });
+      return res.status(200).json({ success: true, newBalance: u.balance, reward });
     }
 
     // ══════════════════════════════════════════════════════
@@ -257,24 +318,35 @@ export default async function handler(req, res) {
       if (vzNow()>=closeTime) return res.status(400).json({ error: '⏰ Este sorteo ya cerró.' });
       const user = await users.findOne({ telegramId: tid });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-      const totalBet = betList.reduce((s,b)=>s+(b.amount||0),0);
-      for (const bet of betList) {
-        if (bet.amount<BET_CONFIG.minBet) return res.status(400).json({ error: `Mínimo ${BET_CONFIG.minBet} 🥬 por animal` });
-        if (bet.amount>BET_CONFIG.maxBetPerUser) return res.status(400).json({ error: `Máximo ${BET_CONFIG.maxBetPerUser} 🥬 por animal` });
+
+      let totalBet = 0;
+      const normalizedBets = [];
+      try {
+        for (let i = 0; i < betList.length; i += 1) {
+          const bet = validateBetPayload(betList[i], i);
+          if (bet.amount < BET_CONFIG.minBet) return res.status(400).json({ error: `Mínimo ${BET_CONFIG.minBet} 🥬 por animal` });
+          if (bet.amount > BET_CONFIG.maxBetPerUser) return res.status(400).json({ error: `Máximo ${BET_CONFIG.maxBetPerUser} 🥬 por animal` });
+          totalBet += bet.amount;
+          normalizedBets.push(bet);
+        }
+      } catch (err) {
+        return res.status(400).json({ error: err.message || 'Apuesta inválida' });
       }
-      if ((user.balance||0)<totalBet) return res.status(400).json({ error: `Saldo insuficiente. Tienes ${user.balance.toLocaleString()} 🥬` });
-      for (const bet of betList) {
+
+      if ((user.balance||0) < totalBet) return res.status(400).json({ error: `Saldo insuficiente. Tienes ${user.balance.toLocaleString()} 🥬` });
+      for (const bet of normalizedBets) {
         const limitDoc = await drawLimits.findOne({ drawId, animal: bet.animal });
         const currentTotal = limitDoc?.total||0;
-        if (currentTotal>=BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite alcanzado para ${bet.animal}` });
-        if (currentTotal+bet.amount>BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite global alcanzado para ${bet.animal}` });
+        if (currentTotal >= BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite alcanzado para ${bet.animal}` });
+        if (currentTotal + bet.amount > BET_CONFIG.maxBetGlobal) return res.status(400).json({ error: `Límite global alcanzado para ${bet.animal}` });
       }
+
       await users.updateOne({ telegramId: tid }, { $inc: { balance: -totalBet, totalBets: 1 }, $set: { updatedAt: new Date() } });
-      for (const bet of betList) await drawLimits.updateOne({ drawId, animal: bet.animal }, { $inc: { total: bet.amount }, $set: { game: drawGame||'lotto', updatedAt: new Date() } }, { upsert: true });
-      const betDocs = betList.map(bet => ({ telegramId: tid, type:'bet', animal:bet.animal, animalNumber:bet.number, amount:bet.amount, drawId, drawGame:drawGame||'lotto', won:null, prize:null, status:'pending', createdAt:new Date() }));
+      for (const bet of normalizedBets) await drawLimits.updateOne({ drawId, animal: bet.animal }, { $inc: { total: bet.amount }, $set: { game: drawGame||'lotto', updatedAt: new Date() } }, { upsert: true });
+      const betDocs = normalizedBets.map(bet => ({ telegramId: tid, type:'bet', animal:bet.animal, animalNumber:bet.number, amount:bet.amount, drawId, drawGame:drawGame||'lotto', won:null, prize:null, status:'pending', createdAt:new Date() }));
       await transactions.insertMany(betDocs);
       const ticketId = `T-${Date.now().toString(36).toUpperCase().slice(-5)}-${Math.random().toString(36).toUpperCase().slice(2,5)}`;
-      const ticketDoc = { ticketId, telegramId:tid, username:username||'Usuario', drawId, drawGame:drawGame||'lotto', bets:betList.map(bet=>({animal:bet.animal,number:bet.number,amount:bet.amount,won:null,prize:null,status:'pending'})), betsCount:betList.length, totalBet, totalPrize:null, status:'pending', createdAt:new Date() };
+      const ticketDoc = { ticketId, telegramId:tid, username:username||'Usuario', drawId, drawGame:drawGame||'lotto', bets:normalizedBets.map(bet=>({animal:bet.animal,number:bet.number,amount:bet.amount,won:null,prize:null,status:'pending'})), betsCount:normalizedBets.length, totalBet, totalPrize:null, status:'pending', createdAt:new Date() };
       await tickets.insertOne(ticketDoc);
       return res.status(200).json({ success: true, ticket: ticketDoc, newBalance: (user.balance||0)-totalBet, message: `✅ Ticket ${ticketId} registrado. ¡Buena suerte!` });
     }
@@ -300,16 +372,20 @@ export default async function handler(req, res) {
     // REGISTRAR DEPÓSITO TON (enviado por TonConnect)
     // ══════════════════════════════════════════════════════
     if (action === 'registerDeposit') {
-      const { txBoc, amountTon, amountLechugas, walletAddress: depWallet, comment } = body;
-      if (!amountTon || !amountLechugas) return res.status(400).json({ error: 'amountTon y amountLechugas requeridos' });
+      const { txBoc, amountTon, walletAddress: depWallet, comment } = body;
+      if (!amountTon) return res.status(400).json({ error: 'amountTon requerido' });
+
+      const amountTonNumber = Number(amountTon);
+      if (isNaN(amountTonNumber) || amountTonNumber <= 0) return res.status(400).json({ error: 'amountTon inválido' });
+      const amountLechugas = Math.floor(amountTonNumber * LECHUGAS_PER_TON);
 
       // Crear depósito pendiente con timestamp para búsqueda posterior
       const depositId = `DEP-${tid}-${Date.now()}`;
       const deposit = {
         depositId, telegramId: tid, username: username||'Usuario',
         txBoc: txBoc || null,
-        amountTon: Number(amountTon),
-        amountLechugas: Number(amountLechugas),
+        amountTon: amountTonNumber,
+        amountLechugas,
         walletAddress: depWallet || null,
         comment: comment || null,
         status: 'pending',
@@ -423,7 +499,7 @@ export default async function handler(req, res) {
       if (!wallet) return res.status(400).json({ error: 'Guarda tu wallet primero.' });
       const amount = Number(withdrawAmount);
       if (!amount || amount < 0.1) return res.status(400).json({ error: 'Monto mínimo: 0.1 TON' });
-      const amountLechugas = Math.floor(amount * 1000);
+      const amountLechugas = Math.floor(amount * LECHUGAS_PER_TON);
       if (amountLechugas > (user.balance||0)) return res.status(400).json({ error: `Saldo insuficiente. Tienes ${user.balance.toLocaleString()} 🥬` });
       await users.updateOne({ telegramId: tid }, { $inc: { balance: -amountLechugas }, $set: { updatedAt: new Date() } });
       const withdrawal = { telegramId:tid, username:username||'Usuario', walletAddress:wallet, amountTON:amount, amountLechugas, status:'pending', createdAt:new Date() };

@@ -35,8 +35,9 @@
     { "path": "/api/scraper", "schedule": "5 22 * * *" },
     { "path": "/api/scraper", "schedule": "5 23 * * *" }
   ],
+
+  "devCommand": "vite --port $PORT",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api/$1" }
   ]
 }

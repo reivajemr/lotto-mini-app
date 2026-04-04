@@ -3,6 +3,15 @@ import Lobby from './components/Lobby';
 import Wallet from './components/Wallet';
 import Tasks from './components/Tasks';
 
+const LECHUGAS_PER_TON = Number(import.meta.env.VITE_LECHUGAS_PER_TON || 1000);
+
+const formatTon = (lechugas: number) => {
+  return Number(lechugas / LECHUGAS_PER_TON).toLocaleString('es-ES', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
+};
+
 // ── Tipos ────────────────────────────────────────────────────
 export type Tab = 'lobby' | 'wallet' | 'tasks';
 
@@ -175,7 +184,7 @@ export default function App() {
             {user.balance.toLocaleString()} 🥬
           </p>
           <p className="text-white/40 text-xs leading-none">
-            ≈ {(user.balance / 1000).toFixed(3)} TON
+            ≈ {formatTon(user.balance)} TON
           </p>
         </div>
       </header>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { apiCall } from '../App';
 
+const LECHUGAS_PER_TON = Number(import.meta.env.VITE_LECHUGAS_PER_TON || 1000);
+
 interface TasksProps {
   telegramId: string;
   username: string;
@@ -68,14 +70,14 @@ export default function Tasks({
         username,
         action: 'task',
         taskId,
-        reward,
-      }) as { success?: boolean; newBalance?: number; error?: string };
+      }) as { success?: boolean; newBalance?: number; reward?: number; error?: string };
 
       if (data?.success) {
+        const rewardAmount = data.reward ?? reward;
         haptic('heavy');
         onBalanceUpdate(data.newBalance ?? 0);
         refreshUser();
-        showAlert(`✅ ¡Tarea completada!\n\n+${reward.toLocaleString()} 🥬 añadidas a tu balance.`);
+        showAlert(`✅ ¡Tarea completada!\n\n+${rewardAmount.toLocaleString()} 🥬 añadidas a tu balance.`);
       } else {
         showAlert('❌ ' + (data?.error || 'Error al completar tarea'));
       }
@@ -226,7 +228,7 @@ export default function Tasks({
       <div className="bg-white/3 border border-white/5 rounded-xl p-4 text-center">
         <p className="text-white/40 text-xs leading-relaxed">
           🌿 Las lechugas (🥬) son la moneda interna de la app.<br/>
-          1,000 🥬 = 1 TON (Testnet)
+          1 {LECHUGAS_PER_TON.toLocaleString()} 🥬 = 1 TON (Testnet)
         </p>
       </div>
     </div>
