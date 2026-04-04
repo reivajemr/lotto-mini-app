@@ -27,6 +27,7 @@ interface AnimalDef {
   number: number;
   name: string;
   emoji: string;
+  image?: string;
 }
 
 interface Selection {
@@ -73,49 +74,57 @@ const BET_CONFIG = {
 };
 
 const GAMES = [
-  { id: 'lotto', name: '🎰 Lotto Activo', color: 'teal' },
-  { id: 'granja', name: '🐄 La Granja', color: 'emerald' },
+  { id: 'lotto', name: 'Lotto Activo', color: 'teal', logo: '/img/lottoactivo/logo_Lotto_Activo.webp' },
+  { id: 'granja', name: 'La Granja', color: 'emerald', logo: '/img/granja/logo_lagranja.webp' },
 ];
 
+const getGameInfo = (gameId: string) => GAMES.find(g => g.id === gameId) || GAMES[0];
+
 const ANIMALS: AnimalDef[] = [
-  { number: 1,  name: 'Carnero',    emoji: '🐏' },
-  { number: 2,  name: 'Toro',       emoji: '🐂' },
-  { number: 3,  name: 'Ciempiés',   emoji: '🐛' },
-  { number: 4,  name: 'Alacrán',    emoji: '🦂' },
-  { number: 5,  name: 'León',       emoji: '🦁' },
-  { number: 6,  name: 'Rana',       emoji: '🐸' },
-  { number: 7,  name: 'Perico',     emoji: '🦜' },
-  { number: 8,  name: 'Ratón',      emoji: '🐭' },
-  { number: 9,  name: 'Águila',     emoji: '🦅' },
-  { number: 10, name: 'Tigre',      emoji: '🐯' },
-  { number: 11, name: 'Gato',       emoji: '🐱' },
-  { number: 12, name: 'Caballo',    emoji: '🐴' },
-  { number: 13, name: 'Mono',       emoji: '🐒' },
-  { number: 14, name: 'Paloma',     emoji: '🕊️' },
-  { number: 15, name: 'Zorro',      emoji: '🦊' },
-  { number: 16, name: 'Oso',        emoji: '🐻' },
-  { number: 17, name: 'Pavo',       emoji: '🦃' },
-  { number: 18, name: 'Burro',      emoji: '🫏' },
-  { number: 19, name: 'Chivo',      emoji: '🐐' },
-  { number: 20, name: 'Cochino',    emoji: '🐷' },
-  { number: 21, name: 'Gallo',      emoji: '🐓' },
-  { number: 22, name: 'Camello',    emoji: '🐫' },
-  { number: 23, name: 'Zebra',      emoji: '🦓' },
-  { number: 24, name: 'Iguana',     emoji: '🦎' },
-  { number: 25, name: 'Gavilán',    emoji: '🦅' },
-  { number: 26, name: 'Murciélago', emoji: '🦇' },
-  { number: 27, name: 'Perro',      emoji: '🐶' },
-  { number: 28, name: 'Venado',     emoji: '🦌' },
-  { number: 29, name: 'Morrocoy',   emoji: '🐢' },
-  { number: 30, name: 'Caimán',     emoji: '🐊' },
-  { number: 31, name: 'Anteater',   emoji: '🦔' },
-  { number: 32, name: 'Serpiente',  emoji: '🐍' },
-  { number: 33, name: 'Lechuza',    emoji: '🦉' },
-  { number: 34, name: 'Loro',       emoji: '🦜' },
-  { number: 35, name: 'Jirafa',     emoji: '🦒' },
-  { number: 36, name: 'Culebra',    emoji: '🐍' },
-  { number: 0,  name: 'Ballena',    emoji: '🐋' },
+  { number: 0,  name: 'Delfín',    emoji: '🐋', image: '/img/lottoactivo/Delfin_2.webp' },
+  { number: 1,  name: 'Carnero',   emoji: '🐏', image: '/img/lottoactivo/Carnero_2.webp' },
+  { number: 2,  name: 'Toro',      emoji: '🐂', image: '/img/lottoactivo/Toro_2.webp' },
+  { number: 3,  name: 'Ciempiés',  emoji: '🐛', image: '/img/lottoactivo/Ciempies_2.webp' },
+  { number: 4,  name: 'Alacrán',   emoji: '🦂', image: '/img/lottoactivo/Alacran_2.webp' },
+  { number: 5,  name: 'León',       emoji: '🦁', image: '/img/lottoactivo/Leon_2.webp' },
+  { number: 6,  name: 'Rana',       emoji: '🐸', image: '/img/lottoactivo/Rana_2.webp' },
+  { number: 7,  name: 'Perico',    emoji: '🦜', image: '/img/lottoactivo/Perico_2.webp' },
+  { number: 8,  name: 'Ratón',      emoji: '🐭', image: '/img/lottoactivo/Raton_2.webp' },
+  { number: 9,  name: 'Águila',     emoji: '🦅', image: '/img/lottoactivo/Aguila_2.webp' },
+  { number: 10, name: 'Tigre',      emoji: '🐯', image: '/img/lottoactivo/Tigre_2.webp' },
+  { number: 11, name: 'Gato',       emoji: '🐱', image: '/img/lottoactivo/Gato_2.webp' },
+  { number: 12, name: 'Caballo',    emoji: '🐴', image: '/img/lottoactivo/Caballo_2.webp' },
+  { number: 13, name: 'Mono',       emoji: '🐒', image: '/img/lottoactivo/Mono_2.webp' },
+  { number: 14, name: 'Paloma',     emoji: '🕊️', image: '/img/lottoactivo/Paloma_2.webp' },
+  { number: 15, name: 'Zorro',      emoji: '🦊', image: '/img/lottoactivo/Zorro_2.webp' },
+  { number: 16, name: 'Oso',        emoji: '🐻', image: '/img/lottoactivo/Oso_2.webp' },
+  { number: 17, name: 'Pavo',       emoji: '🦃', image: '/img/lottoactivo/Pavo_2.webp' },
+  { number: 18, name: 'Burro',      emoji: '🫏', image: '/img/lottoactivo/Burro_2.webp' },
+  { number: 19, name: 'Chivo',      emoji: '🐐', image: '/img/lottoactivo/Chivo_2.webp' },
+  { number: 20, name: 'Cochino',    emoji: '🐷', image: '/img/lottoactivo/Cochino_2.webp' },
+  { number: 21, name: 'Gallo',      emoji: '🐓', image: '/img/lottoactivo/Gallo_2.webp' },
+  { number: 22, name: 'Camello',    emoji: '🐫', image: '/img/lottoactivo/Camello_2.webp' },
+  { number: 23, name: 'Cebra',      emoji: '🦓', image: '/img/lottoactivo/Cebra_2.webp' },
+  { number: 24, name: 'Iguana',     emoji: '🦎', image: '/img/lottoactivo/Iguana_2.webp' },
+  { number: 25, name: 'Gallina',    emoji: '🐔', image: '/img/lottoactivo/Gallina_2.webp' },
+  { number: 26, name: 'Vaca',       emoji: '🐄', image: '/img/lottoactivo/Vaca_2.webp' },
+  { number: 27, name: 'Perro',      emoji: '🐶', image: '/img/lottoactivo/Perro_2.webp' },
+  { number: 28, name: 'Zamuro',     emoji: '🦅', image: '/img/lottoactivo/Zamuro_2.webp' },
+  { number: 29, name: 'Elefante',   emoji: '🐘', image: '/img/lottoactivo/Elefante_2.webp' },
+  { number: 30, name: 'Caimán',     emoji: '🐊', image: '/img/lottoactivo/Caiman_2.webp' },
+  { number: 31, name: 'Lapa',        emoji: '🐹', image: '/img/lottoactivo/Lapa_2.webp' },
+  { number: 32, name: 'Ardilla',    emoji: '🐿️', image: '/img/lottoactivo/Ardilla_2.webp' },
+  { number: 33, name: 'Pescado',    emoji: '🐟', image: '/img/lottoactivo/Pescado_2.webp' },
+  { number: 34, name: 'Venado',     emoji: '🦌', image: '/img/lottoactivo/Venado_2.webp' },
+  { number: 35, name: 'Jirafa',     emoji: '🦒', image: '/img/lottoactivo/Jirafa_2.webp' },
+  { number: 36, name: 'Culebra',    emoji: '🐍', image: '/img/lottoactivo/Culebra_2.webp' },
+  { number: 37, name: 'Ballena',   emoji: '🐋', image: '/img/lottoactivo/Ballena_2.webp' },
 ];
+
+// ── Hora Venezuela ─────────────────────────────────────────────
+function getVenezuelaNow(): number {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' })).getTime();
+}
 
 // ── Countdown hook ────────────────────────────────────────────
 function useCountdown(targetTime: string | null) {
@@ -125,7 +134,9 @@ function useCountdown(targetTime: string | null) {
     if (!targetTime) { setRemaining(''); return; }
 
     const update = () => {
-      const diff = new Date(targetTime).getTime() - Date.now();
+      const targetMs = new Date(targetTime).getTime();
+      const nowVz = getVenezuelaNow();
+      const diff = targetMs - nowVz;
       if (diff <= 0) { setRemaining('¡Ya!'); return; }
       const m = Math.floor(diff / 60000);
       const s = Math.floor((diff % 60000) / 1000);
@@ -337,7 +348,7 @@ export default function Lobby({
 
       {/* Hero */}
       <div className="bg-gradient-to-br from-teal-600/30 to-emerald-600/20 border border-teal-500/30 rounded-2xl p-5 text-center">
-        <div className="text-4xl mb-2">{activeGame === 'lotto' ? '🎰' : '🐄'}</div>
+        <img src={gameInfo.logo} alt={gameInfo.name} className="w-24 h-24 mx-auto mb-2 object-contain" />
         <h2 className="text-white font-bold text-lg">{gameInfo.name}</h2>
         <p className="text-white/50 text-xs mt-1">
           12 sorteos diarios · Premio x{BET_CONFIG.multiplier} · Resultados oficiales
@@ -351,7 +362,7 @@ export default function Lobby({
         )}
         {currentDrawing && !nextOpenDraw && (
           <div className="mt-3 bg-orange-500/20 rounded-xl px-3 py-2">
-            <p className="text-orange-200 text-xs">🎰 Sorteando ahora — {currentDrawing.time}</p>
+            <p className="text-orange-200 text-xs">Sorteando ahora — {currentDrawing.time}</p>
             <p className="text-white font-bold text-lg">{drawingCountdown}</p>
           </div>
         )}
@@ -369,7 +380,7 @@ export default function Lobby({
                 : 'text-white/50 hover:text-white/70'
             }`}
           >
-            {g.name}
+            <img src={g.logo} alt={g.name} className="w-8 h-8 mx-auto object-contain" />
           </button>
         ))}
       </div>
@@ -404,10 +415,14 @@ export default function Lobby({
         ) : (
           <div className="space-y-2">
             {draws.map(draw => {
-              const animalData = draw.winnerAnimal
-                ? ANIMALS.find(a => a.name === draw.winnerAnimal) || { emoji: '🐾', name: draw.winnerAnimal }
+              const foundAnimal = draw.winnerAnimal
+                ? ANIMALS.find(a => a.name === draw.winnerAnimal)
                 : null;
+              const animalData = foundAnimal || (draw.winnerAnimal ? { emoji: '🐾', name: draw.winnerAnimal, image: '' } : null);
               const canBet = draw.status === 'open';
+              const winnerImage = foundAnimal?.image && draw.status === 'done' 
+                ? (activeGame === 'granja' ? foundAnimal.image.replace('lottoactivo', 'granja').replace('_2', '_3') : foundAnimal.image)
+                : null;
 
               return (
                 <div
@@ -425,11 +440,15 @@ export default function Lobby({
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${
                       canBet ? 'bg-teal-500/20' : 'bg-white/5'
                     }`}>
-                      {draw.status === 'done' && animalData ? animalData.emoji : '🕐'}
+                      {draw.status === 'done' && winnerImage ? (
+                        <img src={winnerImage} alt={draw.winnerAnimal} className="w-8 h-8 object-contain" />
+                      ) : draw.status === 'done' && animalData ? (
+                        animalData.emoji
+                      ) : '🕐'}
                     </div>
                     <div>
                       <p className="text-white font-semibold text-sm">
-                        {draw.time} {parseInt(draw.time) < 12 ? 'AM' : 'PM'}
+                        {draw.time.replace(/^(\d):/, '0$1:')} {parseInt(draw.time.split(':')[0]) < 12 ? 'AM' : 'PM'}
                       </p>
                       {canBet && (
                         <p className="text-teal-300 text-xs">
@@ -442,8 +461,11 @@ export default function Lobby({
                         </p>
                       )}
                       {draw.status === 'done' && animalData && (
-                        <p className="text-green-400 text-xs">
-                          {animalData.emoji} {draw.winnerAnimal} #{draw.winnerNumber}
+                        <p className="text-green-400 text-xs flex items-center gap-1">
+                          {winnerImage ? (
+                            <img src={winnerImage} alt={draw.winnerAnimal} className="w-4 h-4 object-contain inline" />
+                          ) : animalData.emoji}
+                          {draw.winnerAnimal} #{draw.winnerNumber}
                         </p>
                       )}
                       {draw.status === 'done' && !draw.winnerAnimal && (
@@ -462,7 +484,7 @@ export default function Lobby({
                     )}
                     {draw.status === 'drawing' && (
                       <span className="bg-orange-500/20 text-orange-300 text-xs px-2.5 py-1 rounded-lg">
-                        🎰 Sorteando
+                        Sorteando
                       </span>
                     )}
                   </div>
@@ -534,7 +556,11 @@ export default function Lobby({
       {editingAnimal && (
         <div className="bg-white/5 border border-white/15 rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">{editingAnimal.emoji}</span>
+            {editingAnimal.image ? (
+              <img src={activeGame === 'granja' ? editingAnimal.image.replace('lottoactivo', 'granja').replace('_2', '_3') : editingAnimal.image} alt={editingAnimal.name} className="w-12 h-12 object-contain" />
+            ) : (
+              <span className="text-3xl">{editingAnimal.emoji}</span>
+            )}
             <div>
               <p className="text-white font-bold">{editingAnimal.name} #{editingAnimal.number}</p>
               <p className="text-white/40 text-xs">
@@ -602,22 +628,31 @@ export default function Lobby({
           </div>
 
           <div className="space-y-2">
-            {selections.map(s => (
-              <div key={s.animal.number} className="flex items-center gap-3 bg-white/5 rounded-xl p-2.5">
-                <span className="text-xl">{s.animal.emoji}</span>
-                <div className="flex-1">
-                  <p className="text-white text-sm font-medium">{s.animal.name}</p>
-                  <p className="text-white/40 text-xs">Premio: {(s.amount * BET_CONFIG.multiplier).toLocaleString()} 🥬</p>
+            {selections.map(s => {
+              const selImage = s.animal.image 
+                ? (activeGame === 'granja' ? s.animal.image.replace('lottoactivo', 'granja').replace('_2', '_3') : s.animal.image)
+                : null;
+              return (
+                <div key={s.animal.number} className="flex items-center gap-3 bg-white/5 rounded-xl p-2.5">
+                  {selImage ? (
+                    <img src={selImage} alt={s.animal.name} className="w-8 h-8 object-contain" />
+                  ) : (
+                    <span className="text-xl">{s.animal.emoji}</span>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-white text-sm font-medium">{s.animal.name}</p>
+                    <p className="text-white/40 text-xs">Premio: {(s.amount * BET_CONFIG.multiplier).toLocaleString()} 🥬</p>
+                  </div>
+                  <p className="text-teal-300 font-bold text-sm">{s.amount.toLocaleString()} 🥬</p>
+                  <button
+                    onClick={() => setSelections(prev => prev.filter(x => x.animal.number !== s.animal.number))}
+                    className="text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+                  >
+                    ×
+                  </button>
                 </div>
-                <p className="text-teal-300 font-bold text-sm">{s.amount.toLocaleString()} 🥬</p>
-                <button
-                  onClick={() => setSelections(prev => prev.filter(x => x.animal.number !== s.animal.number))}
-                  className="text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="border-t border-white/10 pt-3 space-y-1">
@@ -664,7 +699,11 @@ export default function Lobby({
                       : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
                   }`}
                 >
-                  <p className="text-2xl">{animal.emoji}</p>
+                  {animal.image ? (
+                    <img src={activeGame === 'granja' ? animal.image.replace('lottoactivo', 'granja').replace('_2', '_3') : animal.image} alt={animal.name} className="w-8 h-8 mx-auto object-contain" />
+                  ) : (
+                    <p className="text-2xl">{animal.emoji}</p>
+                  )}
                   <p className="text-white/70 text-[9px] mt-0.5 leading-tight">{animal.name}</p>
                   <p className="text-white/40 text-[9px]">#{animal.number}</p>
                   {isSelected && (
@@ -705,7 +744,7 @@ export default function Lobby({
     const parts = currentTicket.drawId.split('-');
     const timeStr = parts[parts.length - 1];
     const timeFormatted = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
-    const gameName = currentTicket.drawGame === 'lotto' ? '🎰 Lotto Activo' : '🐄 La Granja';
+    const gameInfoTicket = getGameInfo(currentTicket.drawGame);
     const draw = draws.find(d => d.drawId === currentTicket.drawId);
     const hasResult = draw?.status === 'done' && draw.winnerAnimal;
 
@@ -731,7 +770,8 @@ export default function Lobby({
 
           {/* Cabecera del ticket */}
           <div className="bg-gradient-to-r from-teal-600/40 to-emerald-600/30 p-4 text-center">
-            <p className="text-white font-bold">{gameName}</p>
+            <img src={gameInfoTicket.logo} alt={gameInfoTicket.name} className="w-16 h-16 mx-auto mb-2 object-contain" />
+            <p className="text-white font-bold">{gameInfoTicket.name}</p>
             <p className="text-teal-200 text-sm">Sorteo {timeFormatted}</p>
             <p className="text-white/50 text-xs mt-1">
               {new Date(currentTicket.createdAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' })}
@@ -748,17 +788,27 @@ export default function Lobby({
           </div>
 
           {/* Resultado del sorteo */}
-          {hasResult && draw && (
-            <div className="bg-green-500/10 border-b border-white/5 p-4 flex items-center gap-3">
-              <span className="text-3xl">
-                {ANIMALS.find(a => a.name === draw.winnerAnimal)?.emoji || '🐾'}
-              </span>
-              <div>
-                <p className="text-white/50 text-xs">Animal ganador</p>
-                <p className="text-green-300 font-bold">{draw.winnerAnimal} #{draw.winnerNumber}</p>
+          {hasResult && draw && (() => {
+            const winnerAnimal = ANIMALS.find(a => a.name === draw.winnerAnimal);
+            const winnerImg = winnerAnimal?.image && activeGame === 'granja'
+              ? winnerAnimal.image.replace('lottoactivo', 'granja').replace('_2', '_3')
+              : winnerAnimal?.image;
+            return (
+              <div className="bg-green-500/10 border-b border-white/5 p-4 flex items-center gap-3">
+                {winnerImg ? (
+                  <img src={winnerImg} alt={draw.winnerAnimal} className="w-12 h-12 object-contain" />
+                ) : (
+                  <span className="text-3xl">
+                    {ANIMALS.find(a => a.name === draw.winnerAnimal)?.emoji || '🐾'}
+                  </span>
+                )}
+                <div>
+                  <p className="text-white/50 text-xs">Animal ganador</p>
+                  <p className="text-green-300 font-bold">{draw.winnerAnimal} #{draw.winnerNumber}</p>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Lista de apuestas */}
           <div className="p-4 space-y-3">
@@ -769,10 +819,17 @@ export default function Lobby({
             <div className="space-y-2">
               {currentTicket.bets.map((bet, i) => {
                 const animalData = ANIMALS.find(a => a.name === bet.animal);
+                const betImage = animalData?.image && activeGame === 'granja'
+                  ? animalData.image.replace('lottoactivo', 'granja').replace('_2', '_3')
+                  : animalData?.image;
                 return (
                   <div key={i} className="flex items-center gap-3 bg-white/3 rounded-xl p-3">
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xl">{animalData?.emoji || '🐾'}</span>
+                      {betImage ? (
+                        <img src={betImage} alt={bet.animal} className="w-8 h-8 object-contain" />
+                      ) : (
+                        <span className="text-xl">{animalData?.emoji || '🐾'}</span>
+                      )}
                       <div>
                         <p className="text-white text-sm font-medium">{bet.animal}</p>
                         <p className="text-white/40 text-xs">#{animalData?.number}</p>
@@ -824,7 +881,7 @@ export default function Lobby({
             onClick={() => { haptic('light'); setView('list'); }}
             className="flex-1 bg-white/10 hover:bg-white/15 text-white py-3 rounded-xl font-medium transition-all"
           >
-            🎰 Seguir apostando
+            Seguir apostando
           </button>
           <button
             onClick={() => { haptic('light'); loadTickets(); setView('history'); }}
@@ -895,7 +952,7 @@ export default function Lobby({
               onClick={() => { haptic('light'); setView('list'); }}
               className="mt-4 bg-teal-500 text-white px-5 py-2.5 rounded-xl font-medium active:scale-95 transition-all"
             >
-              Ir a jugar 🎰
+              Ir a jugar
             </button>
           </div>
         ) : (
@@ -904,7 +961,7 @@ export default function Lobby({
               const parts = ticket.drawId.split('-');
               const timeStr = parts[parts.length - 1];
               const timeFormatted = `${timeStr.slice(0, 2)}:${timeStr.slice(2, 4)}`;
-              const gameName = ticket.drawGame === 'lotto' ? '🎰 Lotto' : '🐄 Granja';
+              const gameInfoHist = getGameInfo(ticket.drawGame);
 
               return (
                 <div
@@ -919,9 +976,12 @@ export default function Lobby({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-white font-semibold text-sm">{gameName} — {timeFormatted}</p>
-                      <p className="text-white/40 text-xs font-mono">{ticket.ticketId}</p>
+                    <div className="flex items-center gap-2">
+                      <img src={gameInfoHist.logo} alt={gameInfoHist.name} className="w-8 h-8 object-contain" />
+                      <div>
+                        <p className="text-white font-semibold text-sm">{gameInfoHist.name} — {timeFormatted}</p>
+                        <p className="text-white/40 text-xs font-mono">{ticket.ticketId}</p>
+                      </div>
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
                       ticket.status === 'won'
@@ -937,9 +997,17 @@ export default function Lobby({
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {ticket.bets.map((bet, i) => {
                       const a = ANIMALS.find(x => x.name === bet.animal);
+                      const histImage = a?.image && ticket.drawGame === 'granja'
+                        ? a.image.replace('lottoactivo', 'granja').replace('_2', '_3')
+                        : a?.image;
                       return (
-                        <span key={i} className="bg-white/8 text-white/60 text-[10px] px-2 py-1 rounded-lg">
-                          {a?.emoji} {bet.animal} · {bet.amount}🥬
+                        <span key={i} className="bg-white/8 text-white/60 text-[10px] px-2 py-1 rounded-lg flex items-center gap-1">
+                          {histImage ? (
+                            <img src={histImage} alt={bet.animal} className="w-4 h-4 object-contain" />
+                          ) : (
+                            <span>{a?.emoji}</span>
+                          )}
+                          {bet.animal} · {bet.amount}🥬
                         </span>
                       );
                     })}

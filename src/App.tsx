@@ -7,7 +7,7 @@ const LECHUGAS_PER_TON = Number(import.meta.env.VITE_LECHUGAS_PER_TON || 1000);
 
 const formatTon = (lechugas: number) => {
   return Number(lechugas / LECHUGAS_PER_TON).toLocaleString('es-ES', {
-    minimumFractionDigits: 3,
+    minimumFractionDigits: 1,
     maximumFractionDigits: 3,
   });
 };

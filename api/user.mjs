@@ -536,12 +536,138 @@ export default async function handler(req, res) {
       const timeStr = `${String(hour).padStart(2,'0')}00`;
       const results = {};
       const gamesToProcess = targetGame ? [targetGame] : ['lotto','granja'];
+
+      const LOTTO_ANIMALS = {
+        0:'Delfín',1:'Carnero',2:'Toro',3:'Ciempiés',4:'Alacrán',5:'León',6:'Rana',7:'Perico',
+        8:'Ratón',9:'Águila',10:'Tigre',11:'Gato',12:'Caballo',13:'Mono',14:'Paloma',15:'Zorro',
+        16:'Oso',17:'Pavo',18:'Burro',19:'Chivo',20:'Cochino',21:'Gallo',22:'Camello',23:'Cebra',
+        24:'Iguana',25:'Gallina',26:'Vaca',27:'Perro',28:'Zamuro',29:'Elefante',30:'Caimán',
+        31:'Lapa',32:'Ardilla',33:'Pescado',34:'Venado',35:'Jirafa',36:'Culebra'
+      };
+
       for (const game of gamesToProcess) {
         const drawId = `${game}-${today}-${timeStr}`;
         const existing = await drawResults.findOne({ drawId });
-        results[game] = existing ? { status:'already_exists', drawId } : { status:'scraping_pending', drawId };
+        
+        if (existing) {
+          results[game] = { status:'already_exists', drawId, winnerNumber: existing.winnerNumber };
+          continue;
+        }
+
+        let winnerNumber = null;
+        let winnerAnimal = null;
+        let scrapedFrom = '';
+
+        try {
+          if (game === 'lotto') {
+            const lottoUrl = `https://www.lottoactivo.com/resultados/lotto_activo/${today}/`;
+            const lottoRes = await fetch(lottoUrl);
+            const lottoHtml = await lottoRes.text();
+            
+            const lottoMatch = lottoHtml.match(/results_image\(\)/);
+            if (lottoMatch) {
+              const optionMatch = lottoHtml.match(/option='([^']+)'/);
+              if (optionMatch) {
+                const postData = new URLSearchParams();
+                postData.append('option', optionMatch[1]);
+                postData.append('loteria', 'lotto_activo');
+                postData.append('fecha', today);
+                
+                const apiRes = await fetch('https://www.lottoactivo.com/core/process.php', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: postData.toString()
+                });
+                const apiData = await apiRes.json();
+                
+                if (apiData.datos && apiData.datos.length > 0) {
+                  const hourNum = hour;
+                  const resultForHour = apiData.datos.find(r => {
+                    const timeMatch = r.time_s?.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+                    if (!timeMatch) return false;
+                    let h = parseInt(timeMatch[1]);
+                    const m = parseInt(timeMatch[2]);
+                    const ampm = timeMatch[3].toLowerCase();
+                    if (ampm === 'pm' && h !== 12) h += 12;
+                    if (ampm === 'am' && h === 12) h = 0;
+                    return h === hourNum;
+                  });
+                  
+                  if (resultForHour && resultForHour.number_animal !== undefined) {
+                    winnerNumber = Number(resultForHour.number_animal);
+                    winnerAnimal = resultForHour.name_animal || LOTTO_ANIMALS[winnerNumber] || null;
+                    scrapedFrom = 'lottoactivo.com';
+                  }
+                }
+              }
+            }
+          } else if (game === 'granja') {
+            const granjaUrl = `https://lagranjita.com/?date=${today}`;
+            const granjaRes = await fetch(granjaUrl);
+            const granjaHtml = await granjaRes.text();
+            
+            const hourNum = hour;
+            const timeId = `lagra${String(hourNum).padStart(2,'0')}00Span`;
+            const imgMatch = new RegExp(`id="${timeId}"[^>]*>\\s*<img[^>]+src="([^"]+)"`).exec(granjaHtml);
+            
+            if (imgMatch) {
+              const imgSrc = imgMatch[1];
+              const fileName = imgSrc.split('/').pop();
+              const numberMatch = fileName.match(/^(\d+)-/);
+              if (numberMatch) {
+                winnerNumber = parseInt(numberMatch[1]);
+                winnerAnimal = LOTTO_ANIMALS[winnerNumber] || null;
+                scrapedFrom = 'lagranjita.com';
+              }
+            }
+          }
+        } catch (scrapeErr) {
+          console.error(`Scrape error for ${game}:`, scrapeErr);
+        }
+
+        if (winnerNumber !== null) {
+          await drawResults.insertOne({
+            drawId,
+            game,
+            winnerNumber,
+            winnerAnimal,
+            scrapedFrom,
+            createdAt: new Date(),
+            isOfficial: true
+          });
+          
+          const tickets = db.collection('tickets');
+          await settleDrawBets(db, drawId, winnerNumber, winnerAnimal);
+          
+          results[game] = { status:'saved', drawId, winnerNumber, winnerAnimal, scrapedFrom };
+        } else {
+          results[game] = { status:'not_found', drawId };
+        }
       }
       return res.status(200).json({ success: true, results, processedAt: new Date().toISOString() });
+    }
+
+    // ══════════════════════════════════════════════════════
+    // SAVE RESULT (only for admin)
+    // ══════════════════════════════════════════════════════
+    if (action === 'saveResult') {
+      const { drawId, winnerNumber, winnerAnimal, adminKey } = body;
+      if (adminKey !== process.env.ADMIN_SECRET_KEY) return res.status(401).json({ error: 'No autorizado' });
+      if (!drawId || winnerNumber === undefined) return res.status(400).json({ error: 'Faltan datos' });
+      
+      const existing = await drawResults.findOne({ drawId });
+      if (existing && existing.isOfficial) {
+        return res.status(400).json({ error: 'No se puede modificar resultado oficial' });
+      }
+      
+      await drawResults.updateOne(
+        { drawId },
+        { $set: { winnerNumber, winnerAnimal, updatedAt: new Date(), isOfficial: false } },
+        { upsert: true }
+      );
+      
+      await settleDrawBets(db, drawId, winnerNumber, winnerAnimal);
+      return res.status(200).json({ success: true, drawId, winnerNumber, winnerAnimal });
     }
 
     return res.status(400).json({ error: 'Acción no reconocida: ' + action });

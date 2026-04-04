@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TonConnectButton, useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react';
 import { apiCall } from '../App';
 
@@ -52,27 +52,28 @@ export default function Wallet({
   const [selectedPack, setSelectedPack] = useState<typeof PACKS[0] | null>(null);
   const [depositPending, setDepositPending] = useState(false);
   const [depositConfirmed, setDepositConfirmed] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
   const userFriendlyAddress = useTonAddress();
   const isConnected = !!wallet;
-  const balanceTON = formatTon(balance);
+  const balanceTON = balance / LECHUGAS_PER_TON;
 
   // Auto-guardar wallet al conectar
-  useEffect(() => {
-    if (userFriendlyAddress && userFriendlyAddress !== initialWalletAddress) {
-      autoSaveWallet(userFriendlyAddress);
-    }
-  }, [userFriendlyAddress]);
-
-  const autoSaveWallet = async (addr: string) => {
+  const autoSaveWallet = useCallback(async (addr: string) => {
     try {
       await apiCall({ telegramId, username, action: 'wallet', walletAddress: addr });
       setWalletAddressInput(addr);
       setWalletSaved(true);
     } catch { /* ignorar */ }
-  };
+  }, [telegramId, username]);
+
+  useEffect(() => {
+    if (userFriendlyAddress && userFriendlyAddress !== initialWalletAddress) {
+      autoSaveWallet(userFriendlyAddress);
+    }
+  }, [userFriendlyAddress, initialWalletAddress, autoSaveWallet]);
 
   useEffect(() => { loadAdminWallet(); }, []);
   const loadAdminWallet = async () => {
@@ -143,6 +144,9 @@ export default function Wallet({
   // ── Polling confirmación ────────────────────────────────
   const startPolling = useCallback((depositId: string, expectedLechugas: number) => {
     let attempts = 0;
+    
+    if (pollingRef.current) clearTimeout(pollingRef.current);
+    
     const poll = async () => {
       attempts++;
       try {
@@ -155,13 +159,14 @@ export default function Wallet({
           setDepositPending(false);
           haptic('heavy');
           showAlert(`🎉 ¡Depósito confirmado!\n\n+${expectedLechugas.toLocaleString()} 🥬 en tu cuenta.`);
+          pollingRef.current = null;
           return;
         }
       } catch { /* ignorar */ }
-      if (attempts < 24) setTimeout(poll, 5000);
+      if (attempts < 24) pollingRef.current = setTimeout(poll, 5000);
     };
-    setTimeout(poll, 8000);
-  }, [telegramId]);
+    pollingRef.current = setTimeout(poll, 8000);
+  }, [telegramId, onBalanceUpdate, haptic, showAlert]);
 
   // ── Guardar wallet manual ───────────────────────────────
   const handleSaveWallet = async () => {
@@ -189,7 +194,7 @@ export default function Wallet({
     if (!isConnected && !walletSaved) { showAlert('⚠️ Guarda tu dirección primero.'); return; }
     const amount = parseFloat(withdrawTon);
     if (isNaN(amount) || amount < 0.1) { showAlert('⚠️ Monto mínimo: 0.1 TON'); return; }
-    if (amount * LECHUGAS_PER_TON > balance) { showAlert(`⚠️ Saldo insuficiente. Tienes ${balanceTON} TON`); return; }
+    if (amount * LECHUGAS_PER_TON > balance) { showAlert(`⚠️ Saldo insuficiente. Tienes ${balanceTON.toFixed(3)} TON`); return; }
     setLoading(true);
     try {
       const data = await apiCall({
@@ -457,7 +462,7 @@ export default function Wallet({
                 step="0.1"
                 className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-3 text-white text-center text-lg font-bold focus:outline-none focus:border-teal-500 placeholder-white/30"
               />
-              <button onClick={() => setWithdrawTon(balanceTON)} className="bg-white/10 hover:bg-white/20 px-4 rounded-xl text-white/70 text-sm">MAX</button>
+              <button onClick={() => setWithdrawTon(String(balanceTON))} className="bg-white/10 hover:bg-white/20 px-4 rounded-xl text-white/70 text-sm">MAX</button>
             </div>
             {withdrawTon && !isNaN(parseFloat(withdrawTon)) && (
               <p className="text-white/40 text-xs text-center">= {(parseFloat(withdrawTon) * LECHUGAS_PER_TON).toLocaleString()} 🥬 descontadas</p>
