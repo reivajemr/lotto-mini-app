@@ -106,9 +106,10 @@ function getDrawSlot(drawId) {
   const todayStr = vzDateStr(now);
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = vzDateStr(tomorrow);
-  let drawTime = new Date(now); drawTime.setHours(hour, min, 0, 0);
-  if (drawTime <= now) drawTime.setDate(drawTime.getDate() + 1);
-  const drawDateStr = drawTime.getDate() === now.getDate() ? todayStr : tomorrowStr;
+  let drawTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, min, 0, 0);
+  let isToday = drawTime > now;
+  if (!isToday) drawTime.setDate(drawTime.getDate() + 1);
+  const drawDateStr = isToday ? todayStr : tomorrowStr;
   const newDrawId = `${parts[0]}-${parts[1]}-${drawDateStr}-${timeStr}`;
   const closeTime = new Date(drawTime.getTime() - 10*60000);
   const resultTime = new Date(drawTime.getTime() + 5*60000);
@@ -282,12 +283,13 @@ export default async function handler(req, res) {
       const now = vzNow();
       const today = vzDateStr(now);
       const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;
+      const tomorrowStr = vzDateStr(tomorrow);
       const drawList = DRAW_TIMES.map(time => {
         const [h,m] = time.split(':').map(Number);
-        let drawTime = new Date(now); drawTime.setHours(h,m,0,0);
-        if (drawTime <= now) drawTime.setDate(drawTime.getDate() + 1);
-        const drawDateStr = drawTime.getDate() === now.getDate() ? today : tomorrowStr;
+        let drawTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+        let isToday = drawTime > now;
+        if (!isToday) drawTime.setDate(drawTime.getDate() + 1);
+        const drawDateStr = isToday ? today : tomorrowStr;
         const drawId = `${game}-${drawDateStr}-${time.replace(':','')}`;
         const closeTime = new Date(drawTime.getTime()-10*60000);
         const resultTime = new Date(drawTime.getTime()+5*60000);
