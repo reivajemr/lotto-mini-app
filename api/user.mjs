@@ -326,7 +326,15 @@ export default async function handler(req, res) {
     if (action === 'placeBet') {
       const { drawId, drawGame, bets: betList } = body;
       if (!drawId||!betList||!Array.isArray(betList)||betList.length===0) return res.status(400).json({ error: 'drawId y bets[] requeridos' });
-      const { closeTime } = getDrawSlot(drawId);
+      const parts = drawId.split('-');
+      const timeStr = parts[parts.length - 1];
+      const year = parseInt(parts[1]);
+      const month = parseInt(parts[2]) - 1;
+      const day = parseInt(parts[3]);
+      const hour = parseInt(timeStr.slice(0,2));
+      const min = parseInt(timeStr.slice(2,4));
+      const drawTime = new Date(year, month, day, hour, min, 0, 0);
+      const closeTime = new Date(drawTime.getTime() - 10*60000);
       if (vzNow()>=closeTime) return res.status(400).json({ error: '⏰ Este sorteo ya cerró.' });
       const user = await users.findOne({ telegramId: tid });
       if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
