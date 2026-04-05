@@ -103,7 +103,8 @@ function getDrawSlot(drawId) {
   const hour = parseInt(timeStr.slice(0,2));
   const min = parseInt(timeStr.slice(2,4));
   const now = vzNow();
-  const drawTime = new Date(now); drawTime.setHours(hour, min, 0, 0);
+  let drawTime = new Date(now); drawTime.setHours(hour, min, 0, 0);
+  if (drawTime <= now) drawTime.setDate(drawTime.getDate() + 1);
   const closeTime = new Date(drawTime.getTime() - 10*60000);
   const resultTime = new Date(drawTime.getTime() + 5*60000);
   return { drawTime, closeTime, resultTime };
